@@ -133,6 +133,43 @@ local function createMonsterModel(cfg: Types.MonsterConfig, position: Vector3): 
 		capeWeld.Parent = body
 		cape.Position = body.Position + Vector3.new(0, 0.5, 3.5)
 	
+	elseif cfg.Id == "EchoToad" then
+		body.Size      = Vector3.new(5, 3, 5)
+		body.BrickColor = BrickColor.new("Earth green")
+		body.Material  = Enum.Material.Grass
+	elseif cfg.Id == "DustDevil" then
+		body.Size      = Vector3.new(3, 8, 3)
+		body.BrickColor = BrickColor.new("Brick yellow")
+		body.Material  = Enum.Material.Sand
+	elseif cfg.Id == "SandGolem" then
+		body.Size      = Vector3.new(6, 7, 6)
+		body.BrickColor = BrickColor.new("Deep orange")
+		body.Material  = Enum.Material.Slate
+	elseif cfg.Id == "IcyWraith" then
+		body.Size      = Vector3.new(3, 6, 3)
+		body.BrickColor = BrickColor.new("Pastel light blue")
+		body.Material  = Enum.Material.Ice
+		body.Transparency = 0.5
+	elseif cfg.Id == "FrostGiant" then
+		body.Size      = Vector3.new(8, 10, 8)
+		body.BrickColor = BrickColor.new("Cyan")
+		body.Material  = Enum.Material.Ice
+	elseif cfg.Id == "VoidSerpent" then
+		body.Size      = Vector3.new(4, 12, 4)
+		body.BrickColor = BrickColor.new("Royal purple")
+		body.Material  = Enum.Material.Neon
+	elseif cfg.Id == "ShadowBeast" then
+		body.Size      = Vector3.new(7, 6, 8)
+		body.BrickColor = BrickColor.new("Really black")
+		body.Material  = Enum.Material.Granite
+	elseif cfg.Id == "DivineGuardian" then
+		body.Size      = Vector3.new(8, 12, 8)
+		body.BrickColor = BrickColor.new("Institutional white")
+		body.Material  = Enum.Material.Neon
+	elseif cfg.Id == "IceColossus" then
+		body.Size      = Vector3.new(12, 16, 12)
+		body.BrickColor = BrickColor.new("Toothpaste")
+		body.Material  = Enum.Material.Ice
 	else
 		-- Fallback placeholder
 		body.Size      = Vector3.new(4, 5, 4)
@@ -241,12 +278,22 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 	-- Tìm vị trí spawn trong zone
 	local zoneFolder = Workspace:WaitForChild(cfg.SpawnZone, 10)
 	local spawnPos   = Vector3.new(0, 5, 0)
+	local zoneCenter = Vector3.new(0, 0, 0)
+	local zoneSizeX  = 150 -- Kích thước mặc định an toàn cho hình chữ nhật/vuông
+	local zoneSizeZ  = 150
 
 	if zoneFolder then
-		local spawnPart = zoneFolder:FindFirstChild("SpawnPoint") :: BasePart?
-		if spawnPart then
-			spawnPos = spawnPart.Position + Vector3.new(
-				math.random(-10, 10), 3, math.random(-10, 10)
+		local base = zoneFolder:FindFirstChild("Base") :: BasePart?
+		if base then
+			zoneCenter = base.Position
+			zoneSizeX  = base.Size.X
+			zoneSizeZ  = base.Size.Z
+			
+			-- Randomize spawn position across the entire zone base
+			spawnPos = zoneCenter + Vector3.new(
+				math.random(-math.floor(zoneSizeX/2) + 5, math.floor(zoneSizeX/2) - 5),
+				5,
+				math.random(-math.floor(zoneSizeZ/2) + 5, math.floor(zoneSizeZ/2) - 5)
 			)
 		end
 	end
@@ -275,6 +322,14 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 			local hrp = model:FindFirstChild("HumanoidRootPart") :: BasePart?
 			if not hrp then continue end
 			if humanoid.PlatformStand then continue end -- Đang bị knocked back
+			
+			-- Leashing: Ép quái vật quay về nếu bản thân nó bị xô đẩy ra quá xa tâm Zone
+			local hrpDx = math.abs(hrp.Position.X - zoneCenter.X)
+			local hrpDz = math.abs(hrp.Position.Z - zoneCenter.Z)
+			if hrpDx > zoneSizeX/2 or hrpDz > zoneSizeZ/2 then
+				humanoid:MoveTo(spawnPos)
+				continue
+			end
 
 			local nearestPlayer: Player? = nil
 			local minDist = 150 -- Chase radius
@@ -285,6 +340,11 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 					local phrp = c:FindFirstChild("HumanoidRootPart") :: BasePart?
 					if phrp then
 						if MapService and MapService.IsInSafeZone(phrp.Position) then continue end
+						
+						-- CHÍNH XÁC YÊU CẦU: Khóa chặt bằng Box Boundary của BaseZone, không tính chiều cao Y!
+						local pDx = math.abs(phrp.Position.X - zoneCenter.X)
+						local pDz = math.abs(phrp.Position.Z - zoneCenter.Z)
+						if pDx > zoneSizeX/2 or pDz > zoneSizeZ/2 then continue end
 						
 						local dist = (phrp.Position - hrp.Position).Magnitude
 						if dist < minDist then
@@ -327,6 +387,12 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 							humanoid:MoveTo(targetHrp.Position)
 						end
 					end
+				end
+			else
+				-- Nếu bị mất mục tiêu (player chạy mất dẹp ra ngoài zone), quái vật đi lùi về giữa bãi spawn
+				local flatDistToSpawn = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(spawnPos.X, 0, spawnPos.Z)).Magnitude
+				if flatDistToSpawn > 10 then
+					humanoid:MoveTo(spawnPos)
 				end
 			end
 		end

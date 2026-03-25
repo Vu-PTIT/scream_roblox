@@ -14,10 +14,13 @@
 
     "ServerScriptService": {
       "Server": {
-        "$path": "src/server"
+        "$path": "src/server",
+        "Plugins": {
+          "$path": "src/plugins"
+        }
       }
     },
-
+    
     "StarterPlayer": {
       "StarterPlayerScripts": {
         "Client": {

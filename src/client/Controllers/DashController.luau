@@ -73,7 +73,7 @@ local function performDash()
 	-- Gọi hàm hét (Shout) cùng lúc khi lướt, bắn sóng thẳng ra sau lưng
 	task.spawn(function()
 		if ShoutController.PerformShout then
-			ShoutController.PerformShout(-direction)
+			ShoutController.PerformShout(0, -direction)
 		end
 	end)
 end

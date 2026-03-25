@@ -4,6 +4,7 @@
 
 export type PetRarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary"
 export type ShoutType = "Normal" | "Circular" | "Focused"
+export type SkillRarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary"
 
 
 export type PetData = {
@@ -14,6 +15,16 @@ export type PetData = {
 	Equipped: boolean,
 }
 
+export type SkillData = {
+	Id: string,
+	SkillType: string,
+	Rarity: SkillRarity,
+	DamageMult: number,
+	Cooldown: number,
+	Equipped: boolean,
+	SlotIndex: number?,   -- 1 hoặc 2
+}
+
 export type UpgradeLevel = {
 	Level: number,
 	StatBonus: number,    -- Giá trị stat thêm vào
@@ -22,23 +33,24 @@ export type UpgradeLevel = {
 -- Dữ liệu lưu trữ cho mỗi người chơi
 export type PlayerData = {
 	-- Tiến trình
-	VocalPoints: number,      -- Điểm Thanh Quản (tích lũy từ hét)
+	VocalPoints: number,      -- Điểm Thanh Quản (tiền dùng để nâng cấp)
+	TotalVocalPoints: number, -- Tổng điểm Thanh Quản (dùng để tính tiến trình Rebirth)
 	Gold: number,             -- Tiền thưởng từ quái/arena
 	Cups: number,             -- Cúp từ đấu trường PvP
 
 	-- Stats
 	Attack: number,           -- Lực đẩy khi hét (base)
-	Defense: number,          -- Độ chịu đựng (weight, giảm knockback nhận)
+	Defense: number,          -- Độ chịu đựng (giảm knockback nhận)
+	MaxHealth: number,        -- Máu tối đa
 
 	-- Rebirth
 	RebirthCount: number,
 	RebirthMultiplier: number, -- Hệ số nhân tổng (áp dụng vào VocalPoints gain)
 
 	-- Upgrades (level đã mua)
-	AttackUpgradeLevel: number,   -- Cấp Microphone
-	SpeakerUpgradeLevel: number,  -- Cấp Speaker
-	DefenseUpgradeLevel: number,  -- Cấp Tai nghe
-	ArmorUpgradeLevel: number,    -- Cấp Giáp
+	DamageUpgradeLevel: number,   -- Cấp Sát thương (Microphone/Speaker)
+	HealthUpgradeLevel: number,   -- Cấp Máu (Tai nghe)
+	ArmorUpgradeLevel: number,    -- Cấp Giáp (Giảm văng)
 
 	-- Pets
 	Pets: { PetData },
@@ -46,7 +58,10 @@ export type PlayerData = {
 
 	-- Customization
 	CustomShoutText: string,      -- Câu hét cá nhân (đã qua filter)
-	CurrentShoutType: ShoutType,  -- Loại tiếng hét hiện tại
+
+	-- Skills (thay thế cho CurrentShoutType)
+	Skills: { SkillData },
+	EquippedSkillIds: { string }, -- Tối đa 2 (2 slot)
 
 
 	-- Meta
@@ -93,6 +108,19 @@ export type PetConfig = {
 	Rarity: PetRarity,
 	Multiplier: number,
 	ModelId: string,  -- rbxassetid
+}
+
+-- Config skill template
+export type SkillConfig = {
+	SkillType: string,
+	DisplayName: string,
+	Rarity: SkillRarity,
+	ShoutTypeId: string, -- "Normal" | "Circular" | "Focused"
+	DamageMult: number,
+	Cooldown: number,
+	Icon: string,
+	Description: string,
+	IsBasic: boolean?,
 }
 
 -- Shout request từ client lên server

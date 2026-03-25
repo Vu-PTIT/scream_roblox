@@ -22,6 +22,8 @@ local RewardUI       = require(script.Parent.Parent.UI.RewardUI)
 local QuestUI        = require(script.Parent.Parent.UI.QuestUI)
 local EggHatchUI     = require(script.Parent.Parent.UI.EggHatchUI)
 local SkillBar       = require(script.Parent.Parent.UI.SkillBar)
+local SkillUI        = require(script.Parent.Parent.UI.SkillUI)
+local BagUI          = require(script.Parent.Parent.UI.BagUI)
 
 local UIController = {}
 local LocalPlayer  = Players.LocalPlayer
@@ -39,6 +41,8 @@ local function CloseAllOpenWindows()
 	if CodeUI.Close then CodeUI.Close() end
 	if RewardUI.Close then RewardUI.Close() end
 	if QuestUI.Close then QuestUI.Close() end
+	if SkillUI.Close then SkillUI.Close() end
+	if BagUI.Close then BagUI.Close() end
 end
 
 -- ============================================================
@@ -106,26 +110,28 @@ end
 -- ============================================================
 -- BOTTOM NAV BUTTONS
 -- ============================================================
-local function buildNavBar()
+local function _buildNavBar()
 	local screen        = Instance.new("ScreenGui")
 	screen.Name         = "NavBar"
 	screen.ResetOnSpawn = false
-	screen.DisplayOrder = 10 -- Above HUD (0)
+	screen.DisplayOrder = 10
 	screen.Parent       = PlayerGui
 
 	local container = Instance.new("Frame")
 	container.Name = "ButtonContainer"
 	
 	local buttons = {
+		{ id = "Shop",    icon = "🛒", baseColor = Config.Theme.BtnShopBase,    shadowColor = Config.Theme.BtnShopShadow,    action = function() CloseAllOpenWindows(); Shop.Open() end },
+		{ id = "Pets",    icon = "🐾", baseColor = Config.Theme.BtnPetsBase,    shadowColor = Config.Theme.BtnPetsShadow,    action = function() CloseAllOpenWindows(); PetUI.Open() end },
+		{ id = "Skills",  icon = "🎴", baseColor = Config.Theme.BtnCodeBase,    shadowColor = Config.Theme.BtnCodeShadow,    action = function() CloseAllOpenWindows(); SkillUI.Open() end },
 		{ id = "Quest",   icon = "📜", baseColor = Config.Theme.BtnQuestBase,   shadowColor = Config.Theme.BtnQuestShadow,   action = function() CloseAllOpenWindows(); QuestUI.Open() end },
 		{ id = "Reward",  icon = "⏱️", baseColor = Config.Theme.BtnRewardBase,  shadowColor = Config.Theme.BtnRewardShadow,  action = function() CloseAllOpenWindows(); RewardUI.Open() end },
 		{ id = "Shout",   icon = "✏️", baseColor = Config.Theme.BtnShoutBase,   shadowColor = Config.Theme.BtnShoutShadow,   action = function() CloseAllOpenWindows(); CustomShoutUI.Open() end },
-		{ id = "Code",    icon = "🎁", baseColor = Config.Theme.BtnCodeBase,    shadowColor = Config.Theme.BtnCodeShadow,    action = function() CloseAllOpenWindows(); CodeUI.Open() end },
 	}
 
 	local numBtns = #buttons
-	container.Size = UDim2.new(0, (numBtns * 64) + ((numBtns - 1) * 15), 0, 64)
-	container.Position = UDim2.new(0.5, 0, 1, -95)
+	container.Size = UDim2.new(0, (numBtns * 58) + ((numBtns - 1) * 12), 0, 58)
+	container.Position = UDim2.new(0.5, 0, 1, -85)
 	container.AnchorPoint = Vector2.new(0.5, 0)
 	container.BackgroundTransparency = 1
 	container.Parent = screen
@@ -134,55 +140,74 @@ local function buildNavBar()
 	layout.FillDirection = Enum.FillDirection.Horizontal
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, 15)
+	layout.Padding = UDim.new(0, 12)
 	layout.Parent = container
 
 	for i, btnData in ipairs(buttons) do
 		local btnWrapper = Instance.new("Frame")
 		btnWrapper.Name = btnData.id .. "Wrapper"
-		btnWrapper.Size = UDim2.new(0, 64, 0, 64)
+		btnWrapper.Size = UDim2.new(0, 58, 0, 58)
 		btnWrapper.BackgroundTransparency = 1
 		btnWrapper.LayoutOrder = i
 		btnWrapper.Parent = container
 
-		-- The Shadow / Bottom 3D part
+		-- Modern Glow / Shadow
 		local shadow = Instance.new("Frame")
 		shadow.Name = "Shadow"
 		shadow.Size = UDim2.new(1, 0, 1, 0)
 		shadow.BackgroundColor3 = btnData.shadowColor
+		shadow.BackgroundTransparency = 0.2
 		shadow.BorderSizePixel = 0
 		shadow.Parent = btnWrapper
 
 		local shadowCorner = Instance.new("UICorner")
-		shadowCorner.CornerRadius = UDim.new(0, 10)
+		shadowCorner.CornerRadius = Config.Theme.CornerRadius
 		shadowCorner.Parent = shadow
 
-		-- The Top / Interactive part
+		-- Main Button
 		local btn = Instance.new("TextButton")
 		btn.Name = "Button"
-		btn.Size = UDim2.new(1, 0, 1, -6) -- Top part is 6 pixels shorter, revealing shadow at bottom
-		btn.AnchorPoint = Vector2.new(0, 0)
+		btn.Size = UDim2.new(1, 0, 1, -4)
 		btn.BackgroundColor3 = btnData.baseColor
 		btn.Text = btnData.icon
 		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		btn.Font = Enum.Font.GothamBold
-		btn.TextSize = 34
+		btn.TextSize = 28
 		btn.BorderSizePixel = 0
 		btn.AutoButtonColor = false
 		btn.Parent = btnWrapper
 
 		local btnCorner = Instance.new("UICorner")
-		btnCorner.CornerRadius = UDim.new(0, 10)
+		btnCorner.CornerRadius = Config.Theme.CornerRadius
 		btnCorner.Parent = btn
+		
+		local stroke = Instance.new("UIStroke")
+		stroke.Thickness = 1.5
+		stroke.Color = Color3.fromRGB(255, 255, 255)
+		stroke.Transparency = 0.8
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		stroke.Parent = btn
 
 		local action = btnData.action
 		
-		-- Push down animation on input
+		-- Hover effect
+		btn.MouseEnter:Connect(function()
+			TweenService:Create(btn, TweenInfo.new(0.15), {
+				BackgroundColor3 = btnData.baseColor:Lerp(Color3.new(1,1,1), 0.15)
+			}):Play()
+		end)
+		
+		btn.MouseLeave:Connect(function()
+			TweenService:Create(btn, TweenInfo.new(0.15), {
+				BackgroundColor3 = btnData.baseColor
+			}):Play()
+		end)
+
+		-- Click animation
 		btn.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 				TweenService:Create(btn, TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					Size = UDim2.new(1, 0, 1, 0),
-					Position = UDim2.new(0, 0, 0, 6)
+					Position = UDim2.new(0, 0, 0, 4)
 				}):Play()
 			end
 		end)
@@ -190,7 +215,6 @@ local function buildNavBar()
 		btn.InputEnded:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 				TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					Size = UDim2.new(1, 0, 1, -6),
 					Position = UDim2.new(0, 0, 0, 0)
 				}):Play()
 			end
@@ -205,12 +229,15 @@ end
 -- ============================================================
 -- KEYBOARD SHORTCUTS
 -- ============================================================
-local function bindKeyShortcuts()
+local function _bindKeyShortcuts()
 	UserInputService.InputBegan:Connect(function(input: InputObject, gp: boolean)
 		if gp then return end
 		if input.KeyCode == Enum.KeyCode.T then
 			CloseAllOpenWindows()
 			CustomShoutUI.Open()
+		elseif input.KeyCode == Enum.KeyCode.B then
+			CloseAllOpenWindows()
+			BagUI.Toggle()
 		end
 	end)
 end
@@ -230,6 +257,21 @@ local function bindProximityPrompts()
 			elseif prompt.Name == "Prompt_Rebirth" then
 				CloseAllOpenWindows()
 				RebirthUI.Open()
+			elseif prompt.Name == "Prompt_Skill" then
+				CloseAllOpenWindows()
+				SkillUI.Open()
+			elseif prompt.Name == "Prompt_Quest" then
+				CloseAllOpenWindows()
+				QuestUI.Open()
+			elseif prompt.Name == "Prompt_Reward" then
+				CloseAllOpenWindows()
+				RewardUI.Open()
+			elseif prompt.Name == "Prompt_Shout" then
+				CloseAllOpenWindows()
+				CustomShoutUI.Open()
+			elseif prompt.Name == "Prompt_Inventory" then
+				CloseAllOpenWindows()
+				BagUI.Open()
 			end
 		end
 	end)
@@ -250,10 +292,12 @@ function UIController.Init()
 	QuestUI.Init()
 	EggHatchUI.Init()
 	SkillBar.Init()
+	SkillUI.Init()
+	BagUI.Init()
 
 	-- Nav bar + shortcuts + map
-	buildNavBar()
-	bindKeyShortcuts()
+	-- _buildNavBar()
+	_bindKeyShortcuts()
 	bindProximityPrompts()
 
 	-- Notification remote

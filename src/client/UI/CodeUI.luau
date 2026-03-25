@@ -9,7 +9,11 @@ local Remotes     = require(Shared.Remotes)
 
 local CodeUI = {}
 local LocalPlayer   = Players.LocalPlayer
-local PlayerGui     = LocalPlayer:WaitForChild("PlayerGui")
+
+local function getPlayerGui(): PlayerGui?
+	if not LocalPlayer then return nil end
+	return LocalPlayer:FindFirstChildOfClass("PlayerGui")
+end
 
 local codeScreen: ScreenGui? = nil
 local isOpen = false
@@ -19,14 +23,23 @@ local function buildUI(): ScreenGui
 	screen.Name            = "CodeUI"
 	screen.ResetOnSpawn    = false
 	screen.DisplayOrder    = 20
+	screen.IgnoreGuiInset  = true
 	screen.Enabled         = false
+
+	local overlay           = Instance.new("Frame")
+	overlay.Size            = UDim2.new(1, 0, 1, 0)
+	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	overlay.BackgroundTransparency = 0.5
+	overlay.BorderSizePixel = 0
+	overlay.Parent          = screen
 
 	local panel            = Instance.new("Frame")
 	panel.Name             = "Panel"
-	panel.Size             = UDim2.new(0, 350, 0, 180)
-	panel.Position         = UDim2.new(0.5, -175, 0.35, 0)
+	panel.Size             = UDim2.new(0, 420, 0, 240)
+	panel.Position         = UDim2.new(0.5, 0, 0.45, 0)
+	panel.AnchorPoint      = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3 = Config.Theme.Background
-	panel.BackgroundTransparency = Config.Theme.Transparency
+	panel.BackgroundTransparency = Config.Theme.PanelTransparency
 	panel.BorderSizePixel  = 0
 	panel.Parent           = screen
 
@@ -39,23 +52,28 @@ local function buildUI(): ScreenGui
 	stroke.Thickness = Config.Theme.StrokeThickness
 	stroke.Transparency = 0.3
 	stroke.Parent = panel
+	
+	local grad = Instance.new("UIGradient")
+	grad.Color = ColorSequence.new(Config.Theme.PanelGradient[1], Config.Theme.PanelGradient[2])
+	grad.Rotation = 45
+	grad.Parent = panel
 
 	local title    = Instance.new("TextLabel")
-	title.Size     = UDim2.new(1, 0, 0, 48)
+	title.Size     = UDim2.new(1, 0, 0, 64)
 	title.BackgroundTransparency = 1
-	title.Text     = "🎁 " .. Config.Localization.CodeUI.Title
+	title.Text     = "REDEEM CODES"
 	title.TextColor3 = Config.Theme.TextMain
 	title.Font     = Enum.Font.GothamBlack
-	title.TextSize = 22
+	title.TextSize = 24
 	title.Parent   = panel
 
 	local textBox  = Instance.new("TextBox")
 	textBox.Name   = "CodeTextBox"
-	textBox.Size   = UDim2.new(1, -30, 0, 44)
-	textBox.Position = UDim2.new(0, 15, 0, 60)
+	textBox.Size   = UDim2.new(1, -60, 0, 50)
+	textBox.Position = UDim2.new(0, 30, 0, 85)
 	textBox.BackgroundColor3 = Config.Theme.SecondaryBackground
-	textBox.BackgroundTransparency = 0.4
-	textBox.PlaceholderText = Config.Localization.CodeUI.Placeholder
+	textBox.BackgroundTransparency = 0.3
+	textBox.PlaceholderText = "ENTER CODE HERE..."
 	textBox.PlaceholderColor3 = Config.Theme.TextMuted
 	textBox.Text   = ""
 	textBox.TextColor3 = Config.Theme.TextMain
@@ -65,44 +83,48 @@ local function buildUI(): ScreenGui
 	textBox.BorderSizePixel = 0
 	textBox.Parent = panel
 
+	local cornerBox = Instance.new("UICorner")
+	cornerBox.CornerRadius = UDim.new(0, 12)
+	cornerBox.Parent = textBox
+	
 	local boxStroke = Instance.new("UIStroke")
 	boxStroke.Color = Config.Theme.StrokeColor
 	boxStroke.Thickness = 1
-	boxStroke.Transparency = 0.6
+	boxStroke.Transparency = 0.5
 	boxStroke.Parent = textBox
 
-	local cornerBox = Instance.new("UICorner")
-	cornerBox.CornerRadius = UDim.new(0, 10)
-	cornerBox.Parent = textBox
-
 	local confirmBtn = Instance.new("TextButton")
-	confirmBtn.Size  = UDim2.new(0.48, -10, 0, 44)
-	confirmBtn.Position = UDim2.new(0, 15, 1, -60)
-	confirmBtn.BackgroundColor3 = Config.Theme.BtnCodeBase
-	confirmBtn.Text  = "✅ " .. Config.Localization.CodeUI.Redeem
-	confirmBtn.TextColor3 = Config.Theme.TextMain
+	confirmBtn.Size  = UDim2.new(0, 175, 0, 50)
+	confirmBtn.Position = UDim2.new(0, 30, 1, -75)
+	confirmBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	confirmBtn.Text  = "REDEEM"
+	confirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	confirmBtn.Font  = Enum.Font.GothamBold
 	confirmBtn.TextSize = 16
 	confirmBtn.BorderSizePixel = 0
 	confirmBtn.Parent = panel
+	
+	local gCon = Instance.new("UIGradient")
+	gCon.Color = ColorSequence.new(Config.Theme.SuccessGradient[1], Config.Theme.SuccessGradient[2])
+	gCon.Parent = confirmBtn
 
 	local cornerConf = Instance.new("UICorner")
-	cornerConf.CornerRadius = UDim.new(0, 10)
+	cornerConf.CornerRadius = UDim.new(0, 25)
 	cornerConf.Parent = confirmBtn
 
 	local cancelBtn  = Instance.new("TextButton")
-	cancelBtn.Size   = UDim2.new(0.48, -10, 0, 44)
-	cancelBtn.Position = UDim2.new(0.52, 5, 1, -60)
+	cancelBtn.Size   = UDim2.new(0, 175, 0, 50)
+	cancelBtn.Position = UDim2.new(1, -205, 1, -75)
 	cancelBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-	cancelBtn.Text   = "❌ " .. Config.Localization.CustomShout.Cancel
-	cancelBtn.TextColor3 = Config.Theme.TextSecondary
+	cancelBtn.Text   = "CANCEL"
+	cancelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	cancelBtn.Font   = Enum.Font.GothamBold
 	cancelBtn.TextSize = 16
 	cancelBtn.BorderSizePixel = 0
 	cancelBtn.Parent = panel
 
 	local cornerCan = Instance.new("UICorner")
-	cornerCan.CornerRadius = UDim.new(0, 10)
+	cornerCan.CornerRadius = UDim.new(0, 25)
 	cornerCan.Parent = cancelBtn
 
 	confirmBtn.Activated:Connect(function()
@@ -120,9 +142,32 @@ local function buildUI(): ScreenGui
 	return screen
 end
 
-function CodeUI.Init()
+function CodeUI.Init(overrideParent: Instance?)
+	local pg = overrideParent or getPlayerGui()
+	if not pg then return end
+	
+	-- [SMART BINDING] Detect existing CodeUI
+	local existing: ScreenGui? = nil
+	for _, child in ipairs(pg:GetChildren()) do
+		if child:IsA("ScreenGui") then
+			if child.Name == "CodeUI" or child:FindFirstChild("CodeTextBox", true) then
+				if not existing then
+					existing = child
+				else
+					child:Destroy()
+				end
+			end
+		end
+	end
+	
+	if existing then
+		codeScreen = existing
+		print("ℹ️ [CodeUI] Using existing ScreenGui for smart binding.")
+		return
+	end
+
 	local screen = buildUI()
-	screen.Parent = PlayerGui
+	screen.Parent = pg
 	codeScreen = screen
 end
 

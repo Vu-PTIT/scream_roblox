@@ -20,14 +20,11 @@ task.defer(function()
 end)
 
 local ShoutService = {}
-local ShoutCooldowns: { [number]: number } = {}
+local ShoutCooldowns: { [string]: number } = {}
 
 local function getTotalAttack(data: Types.PlayerData): number
-	local upgradeBonus = 0
-	local atkUpgrades = Config.Upgrades[1] 
-	local atkUpgrades2 = Config.Upgrades[2] 
-	upgradeBonus = (data.AttackUpgradeLevel * atkUpgrades.StatPerLevel) + (data.SpeakerUpgradeLevel * atkUpgrades2.StatPerLevel)
-
+	local upgradeBonus = data.DamageUpgradeLevel * Config.Upgrades[1].StatPerLevel
+	
 	local petMult = 1
 	for _, petData in ipairs(data.Pets) do
 		if petData.Equipped then
@@ -39,9 +36,7 @@ local function getTotalAttack(data: Types.PlayerData): number
 end
 
 local function getTotalDefense(data: Types.PlayerData): number
-	local defUpgrade1 = Config.Upgrades[3] 
-	local defUpgrade2 = Config.Upgrades[4] 
-	local bonus = (data.DefenseUpgradeLevel * defUpgrade1.StatPerLevel) + (data.ArmorUpgradeLevel * defUpgrade2.StatPerLevel)
+	local bonus = data.ArmorUpgradeLevel * Config.Upgrades[3].StatPerLevel
 	return data.Defense + bonus
 end
 
@@ -112,7 +107,8 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 
 	local originCFrame = CFrame.new(hrp.Position, hrp.Position + direction)
 	
-	local range = shoutTypeConfig and shoutTypeConfig.Range or Config.Shout.KnockbackRange
+	local baseRange = shoutTypeConfig and shoutTypeConfig.Range or Config.Shout.KnockbackRange
+	local range = baseRange * math.pow(pMult, 0.45) -- Scale range by power (sqrt-ish)
 	local angle = shoutTypeConfig and shoutTypeConfig.Angle or Config.Shout.ConeAngle
 	
 	local targets = getTargetsInShape(originCFrame, casterChar, range, angle)
@@ -139,8 +135,10 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 		if not target.IsPlayer then
 			targetCharAct:SetAttribute("LastDamagedBy", casterUserId)
 			targetHum:TakeDamage(damageTaken)
+			print("[ShoutService] HIT MONSTER:", targetCharAct.Name, "Damage:", damageTaken)
 		else
 			targetHum:TakeDamage(damageTaken * 0.5) 
+			print("[ShoutService] HIT PLAYER:", targetCharAct.Name, "Damage:", damageTaken * 0.5)
 		end
 
 		Remotes.Events.KnockbackOccurred:FireAllClients(targetCharAct, force, damageTaken, casterUserId)
@@ -181,7 +179,7 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 	return hitCount
 end
 
-local function onShoutFired(caster: Player, direction: Vector3, powerMult: number?)
+local function onShoutFired(caster: Player, direction: Vector3, powerMult: number?, slotIndex: number?)
 	local pMult = math.clamp(powerMult or 1.0, 1.0, 5.0) -- Cap safety
 	if not caster.Character then return end
 	if direction.Magnitude < 0.01 then return end
@@ -191,23 +189,63 @@ local function onShoutFired(caster: Player, direction: Vector3, powerMult: numbe
 	local attackerData = DataService.GetData(caster) :: Types.PlayerData?
 	if not attackerData then return end
 
-	local shoutTypeId = attackerData.CurrentShoutType or "Normal"
-	local shoutConfig = Config.ShoutTypes[shoutTypeId] or Config.ShoutTypes.Normal
+	local sIndex = slotIndex or 0
+	local skillConfig: Types.SkillConfig? = nil
+
+	if sIndex == 0 then
+		-- Basic Attack (Normal Click)
+		for _, cfg in ipairs(Config.Skills) do
+			if cfg.IsBasic then
+				skillConfig = cfg
+				break
+			end
+		end
+	else
+		-- Gacha Skill (Phím 1, 2)
+		local skillId = attackerData.EquippedSkillIds[sIndex]
+		if skillId then
+			for _, skill in ipairs(attackerData.Skills) do
+				if skill.Id == skillId then
+					for _, cfg in ipairs(Config.Skills) do
+						if cfg.SkillType == skill.SkillType then
+							skillConfig = cfg
+							break
+						end
+					end
+					break
+				end
+			end
+		end
+	end
+	
+	if not skillConfig then
+		-- Fallback về skill đầu tiên nếu không tìm thấy
+		skillConfig = Config.Skills[1]
+	end
+	
+	local finalSkillConfig = skillConfig :: Types.SkillConfig
 
 	local now     = os.clock()
-	local lastTime = ShoutCooldowns[caster.UserId] or 0
-	if now - lastTime < shoutConfig.Cooldown then return end
-	ShoutCooldowns[caster.UserId] = now
+	local lastTime = ShoutCooldowns[caster.UserId .. "_" .. sIndex] or 0
+	if now - lastTime < finalSkillConfig.Cooldown then return end
+	ShoutCooldowns[caster.UserId .. "_" .. sIndex] = now
 
-	local totalAtk = getTotalAttack(attackerData) * shoutConfig.DamageMult
-	local hitCount = ShoutService.PerformShout(caster.Character, totalAtk, direction, false, caster.UserId, pMult, shoutConfig)
+	local shoutTypeConfig = Config.ShoutTypes[finalSkillConfig.ShoutTypeId] or Config.ShoutTypes.Normal
+	local totalAtk = getTotalAttack(attackerData) * finalSkillConfig.DamageMult
+	
+	print("[ShoutService] Caster:", caster.Name, "Skill:", finalSkillConfig.DisplayName, "TotalAtk:", totalAtk, "pMult:", pMult)
+	
+	local hitCount = ShoutService.PerformShout(caster.Character, totalAtk, direction, false, caster.UserId, pMult, shoutTypeConfig)
 
 	local vpGain = (Config.Shout.VocalPointsPerUse * pMult) * attackerData.RebirthMultiplier
 	if hitCount > 0 then
 		vpGain += (Config.Shout.VocalPointsPerHit * hitCount * pMult) * attackerData.RebirthMultiplier
 	end
 
-	DataService.UpdateField(caster, "VocalPoints", attackerData.VocalPoints + vpGain)
+	DataService.UpdateFields(caster, {
+		VocalPoints      = attackerData.VocalPoints + vpGain,
+		TotalVocalPoints = (attackerData.TotalVocalPoints or 0) + vpGain
+	})
 	
 	local QuestService = require(script.Parent.QuestService)
 	QuestService.RegisterAction(caster, "Shout", 1)
@@ -217,20 +255,9 @@ Remotes.Events.ShoutFired.OnServerEvent:Connect(function(player: Player, ...)
 	local args = { ... }
 	local direction = args[1]
 	local pMult     = args[2]
-	if typeof(direction) == "Vector3" then
-		onShoutFired(player, direction, tonumber(pMult))
-	end
-end)
-
-Remotes.Events.SetShoutType.OnServerEvent:Connect(function(player: Player, ...)
-	local args = { ... }
-	local shoutType = args[1]
-	if type(shoutType) == "string" and Config.ShoutTypes[shoutType] then
-		if not DataService then return end
-		local data = DataService.GetData(player)
-		if data then
-			DataService.UpdateField(player, "CurrentShoutType", shoutType)
-		end
+	local slotIndex = args[3]
+	if typeof(direction) == "Vector3" and type(pMult) == "number" then
+		onShoutFired(player, direction, pMult, type(slotIndex) == "number" and slotIndex or 1)
 	end
 end)
 

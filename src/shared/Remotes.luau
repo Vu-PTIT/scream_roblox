@@ -61,11 +61,23 @@ local Remotes = {
 	-- Payload: pets: { PetData }
 	EggOpenResult = Event("EggOpenResult"),
 
+	-- [Client → Server] Yêu cầu mở cuộn skill
+	-- Payload: quantity: number (1 hoặc 10)
+	OpenSkillScroll = Event("OpenSkillScroll"),
+
+	-- [Server → Client] Kết quả gacha skill
+	-- Payload: skills: { SkillData }
+	SkillScrollResult = Event("SkillScrollResult"),
+
 	MonsterShoutVFX = Event("MonsterShoutVFX"),
 
 	-- [Client → Server] Equip/Unequip pet
 	-- Payload: petId: string, equipped: boolean
 	SetPetEquipped = Event("SetPetEquipped"),
+
+	-- [Client → Server] Equip/Unequip skill
+	-- Payload: skillId: string, equipped: boolean, slotIndex: number?
+	SetSkillEquipped = Event("SetSkillEquipped"),
 
 	-- [Client → Server] Yêu cầu Rebirth
 	RebirthRequest = Event("RebirthRequest"),

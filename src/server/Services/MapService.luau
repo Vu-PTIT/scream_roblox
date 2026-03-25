@@ -3,6 +3,8 @@
 -- Server-side: Tự động khởi tạo Bản đồ (Safe Zone, PvP) và quản lý logic khu vực
 
 local MapService = {}
+local Shared = game.ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
 
 -- Tạo part an toàn
 local function createSafeZone()
@@ -20,30 +22,35 @@ local function createSafeZone()
 		safeZonesFolder.Parent = mapFolder
 	end
 
-	-- Lấy config từ Shared
-	local Shared = game.ReplicatedStorage:WaitForChild("Shared")
-	local Config = require(Shared:WaitForChild("Config"))
-
 	local szConfig = Config.Map.SafeZone
+	local part: Part
+	local existing = safeZonesFolder:FindFirstChild("SafeZoneBase")
+	
+	if existing and existing:IsA("Part") then
+		part = existing
+		print("ℹ️ [MapService] Sử dụng SafeZoneBase hiện có trong Studio.")
+	else
+		part = Instance.new("Part")
+		part.Name = "SafeZoneBase"
+		part.Anchored = true
+		part.Size = szConfig.Size
+		part.Position = szConfig.Position
+		part.Color = Color3.fromRGB(150, 255, 150)
+		part.Material = Enum.Material.Grass
+		part.TopSurface = Enum.SurfaceType.Smooth
+		part.Parent = safeZonesFolder
+	end
 
-	local part = Instance.new("Part")
-	part.Name = "SafeZoneBase"
-	part.Anchored = true
-	part.Size = szConfig.Size
-	part.Position = szConfig.Position
-	part.Color = Color3.fromRGB(150, 255, 150) -- Màu xanh nhạt hiền hòa
-	part.Material = Enum.Material.Grass
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.Parent = safeZonesFolder
-
-	-- Thêm SpawnLocation mặc định ở giữa SafeZone
-	local spawn = Instance.new("SpawnLocation")
-	spawn.Anchored = true
-	spawn.Size = Vector3.new(12, 1, 12)
-	spawn.Position = szConfig.Position + Vector3.new(0, 0.5, 0)
-	spawn.BrickColor = BrickColor.new("Bright green")
-	spawn.TopSurface = Enum.SurfaceType.Smooth
-	spawn.Parent = mapFolder
+	-- Thêm SpawnLocation nếu chưa có
+	if not mapFolder:FindFirstChildOfClass("SpawnLocation") then
+		local spawn = Instance.new("SpawnLocation")
+		spawn.Anchored = true
+		spawn.Size = Vector3.new(12, 1, 12)
+		spawn.Position = part.Position + Vector3.new(0, 0.5, 0)
+		spawn.BrickColor = BrickColor.new("Bright green")
+		spawn.TopSurface = Enum.SurfaceType.Smooth
+		spawn.Parent = mapFolder
+	end
 end
 
 -- Tạo part PvP
@@ -62,53 +69,64 @@ local function createPvPArena()
 		pvpZonesFolder.Parent = mapFolder
 	end
 
-	local Shared = game.ReplicatedStorage:WaitForChild("Shared")
-	local Config = require(Shared:WaitForChild("Config"))
-
 	local pvpConfig = Config.Map.PvPArena
+	local existing = pvpZonesFolder:FindFirstChild("PvPArenaBase")
 
-	local part = Instance.new("Part")
-	part.Name = "PvPArenaBase"
-	part.Anchored = true
-	part.Size = pvpConfig.Size
-	part.Position = pvpConfig.Position
-	part.Color = Color3.fromRGB(255, 100, 100) -- Màu đỏ đại diện PvP
-	part.Material = Enum.Material.Sand
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.Parent = pvpZonesFolder
-
-	-- Tạo tường vô hình hoặc cảnh báo quanh PvP nếu cần
+	if existing and existing:IsA("Part") then
+		print("ℹ️ [MapService] Sử dụng PvPArenaBase hiện có trong Studio.")
+	else
+		local part = Instance.new("Part")
+		part.Name = "PvPArenaBase"
+		part.Anchored = true
+		part.Size = pvpConfig.Size
+		part.Position = pvpConfig.Position
+		part.Color = Color3.fromRGB(255, 100, 100)
+		part.Material = Enum.Material.Sand
+		part.TopSurface = Enum.SurfaceType.Smooth
+		part.Parent = pvpZonesFolder
+	end
 end
 
 -- Tạo khu vực Quái Vật (PvE)
 local function createZone(zoneName: string, config: any, color: Color3, material: Enum.Material)
-	if workspace:FindFirstChild(zoneName) then return end
+	local zoneFolder = workspace:FindFirstChild(zoneName)
+	if not zoneFolder then
+		zoneFolder = Instance.new("Folder")
+		zoneFolder.Name = zoneName
+		zoneFolder.Parent = workspace
+	end
 
-	local zoneFolder = Instance.new("Folder")
-	zoneFolder.Name = zoneName
-	zoneFolder.Parent = workspace
+	local part: Part
+	local existing = zoneFolder:FindFirstChild("Base")
+	
+	if existing and existing:IsA("Part") then
+		part = existing
+	else
+		part = Instance.new("Part")
+		part.Name = "Base"
+		part.Anchored = true
+		part.Size = config.Size
+		part.Position = config.Position
+		part.Color = color
+		part.Material = material
+		part.TopSurface = Enum.SurfaceType.Smooth
+		part.Parent = zoneFolder
+	end
 
-	local part = Instance.new("Part")
-	part.Name = "Base"
-	part.Anchored = true
-	part.Size = config.Size
-	part.Position = config.Position
-	part.Color = color
-	part.Material = material
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.Parent = zoneFolder
-
-	-- Thêm SpawnPoint cho Quái
-	local spawnPoint = Instance.new("Part")
-	spawnPoint.Name = "SpawnPoint"
-	spawnPoint.Anchored = true
-	spawnPoint.Size = Vector3.new(4, 1, 4)
-	spawnPoint.Position = config.Position + Vector3.new(0, 0.5, 0)
-	spawnPoint.Transparency = 1
-	spawnPoint.CanCollide = false
-	spawnPoint.Parent = zoneFolder
+	-- Thêm SpawnPoint cho Quái nếu chưa có
+	if not zoneFolder:FindFirstChild("SpawnPoint") then
+		local spawnPoint = Instance.new("Part")
+		spawnPoint.Name = "SpawnPoint"
+		spawnPoint.Anchored = true
+		spawnPoint.Size = Vector3.new(4, 1, 4)
+		spawnPoint.Position = part.Position + Vector3.new(0, 0.5, 0)
+		spawnPoint.Transparency = 1
+		spawnPoint.CanCollide = false
+		spawnPoint.Parent = zoneFolder
+	end
 end
 
+-- Tạo các khu vực Rebirth
 -- Tạo các khu vực Rebirth
 local function createRebirthAreas()
 	local mapFolder = workspace:FindFirstChild("Map")
@@ -120,9 +138,11 @@ local function createRebirthAreas()
 		rebirthZonesFolder.Parent = mapFolder
 	end
 
+	local RunService = game:GetService("RunService")
+	if not RunService:IsRunning() then return end
+
 	local DataService = require(script.Parent.DataService)
 	local Remotes = game.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
-	local RunService = game:GetService("RunService")
 
 	local areas = {
 		{ Name = "Desert", Req = 1, Color = Color3.fromRGB(244, 164, 96), Pos = Vector3.new(0, 0, -200) },
@@ -159,7 +179,7 @@ local function createRebirthAreas()
 		local txt = Instance.new("TextLabel")
 		txt.Size = UDim2.new(1, 0, 1, 0)
 		txt.BackgroundTransparency = 1
-		txt.Text = area.Name .. "\\nRequires " .. area.Req .. " Rebirths"
+		txt.Text = area.Name .. "\nRequires " .. area.Req .. " Rebirths"
 		txt.TextScaled = true
 		txt.TextColor3 = Color3.new(1,1,1)
 		txt.Font = Enum.Font.GothamBold
@@ -176,34 +196,122 @@ local function createRebirthAreas()
 		})
 	end
 
-	-- Sử dụng Heartbeat thay thế Touched chống bypass lách góc
-	RunService.Heartbeat:Connect(function()
-		for _, player in ipairs(game.Players:GetPlayers()) do
-			local char = player.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-			if not hrp then continue end
+	-- Chỉ chạy logic chặn cổng khi game đang chạy
+	if RunService:IsRunning() then
+		RunService.Heartbeat:Connect(function()
+			for _, player in ipairs(game.Players:GetPlayers()) do
+				local char = player.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+				if not hrp then continue end
 
-			local pos = hrp.Position
-			for _, gate in ipairs(blockedGates) do
-				-- Kiểm tra bounding box của khu vực bị khóa
-				if pos.Z < gate.MaxZ and pos.Z > gate.MinZ and pos.X < gate.MaxX and pos.X > gate.MinX then
-					-- Load data kiểm tra
-					local ok, data = pcall(function() return DataService.GetData(player) end)
-					if ok and data and data.RebirthCount < gate.Req then
-						-- Hoàn trả vị trí nhưng giữ nguyên góc xoay của người chơi
-						hrp.CFrame = CFrame.new(gate.PushBackTarget.X, hrp.Position.Y, gate.PushBackTarget.Z) * hrp.CFrame.Rotation
-						
-						-- Tránh spam notification
-						local lastNotif = player:GetAttribute("LastRebirthNotif_" .. gate.Name) or 0
-						if os.clock() - lastNotif > 2 then
-							player:SetAttribute("LastRebirthNotif_" .. gate.Name, os.clock())
-							Remotes.Events.Notification:FireClient(player, "❌ Cần " .. gate.Req .. " Rebirth để vào khu vực " .. gate.Name .. "!")
+				local pos = hrp.Position
+				for _, gate in ipairs(blockedGates) do
+					-- Kiểm tra bounding box của khu vực bị khóa
+					if pos.Z < gate.MaxZ and pos.Z > gate.MinZ and pos.X < gate.MaxX and pos.X > gate.MinX then
+						-- Load data kiểm tra
+						local ok, data = pcall(function() return DataService.GetData(player) end)
+						if ok and data and data.RebirthCount < gate.Req then
+							-- Hoàn trả vị trí nhưng giữ nguyên góc xoay của người chơi
+							hrp.CFrame = CFrame.new(gate.PushBackTarget.X, hrp.Position.Y, gate.PushBackTarget.Z) * hrp.CFrame.Rotation
+							
+							-- Tránh spam notification
+							local lastNotif = player:GetAttribute("LastRebirthNotif_" .. gate.Name) or 0
+							if os.clock() - lastNotif > 2 then
+								player:SetAttribute("LastRebirthNotif_" .. gate.Name, os.clock())
+								Remotes.Events.Notification:FireClient(player, "❌ Cần " .. gate.Req .. " Rebirth để vào khu vực " .. gate.Name .. "!")
+							end
 						end
 					end
 				end
 			end
-		end
-	end)
+		end)
+	end
+end
+
+-- Tạo các khu vực Boss Gates
+local function createBossRoomGates()
+	local mapFolder = workspace:FindFirstChild("Map")
+	if not mapFolder then return end
+	local gatesFolder = mapFolder:FindFirstChild("BossGates")
+	if not gatesFolder then
+		gatesFolder = Instance.new("Folder")
+		gatesFolder.Name = "BossGates"
+		gatesFolder.Parent = mapFolder
+	end
+
+	local RunService = game:GetService("RunService")
+	if not RunService:IsRunning() then return end
+
+	local DataService = require(script.Parent.DataService)
+	local Remotes = game.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
+
+	local bossAreas = {
+		{ Name = "BossRoom", Req = 1, Pos = Vector3.new(-200, 0, 0), Size = Vector3.new(150, 1, 150), Dir = Vector3.new(1, 0, 0) },
+		{ Name = "IceBossRoom", Req = 5, Pos = Vector3.new(-400, 0, 0), Size = Vector3.new(150, 1, 150), Dir = Vector3.new(1, 0, 0) },
+	}
+
+	local blockedGates = {}
+
+	for _, area in ipairs(bossAreas) do
+		local blocker = Instance.new("Part")
+		blocker.Name = area.Name .. "_Gate"
+		blocker.Size = Vector3.new(5, 20, area.Size.Z) -- Tường chắn song song trục Z
+		blocker.Position = area.Pos + Vector3.new(area.Size.X/2, 10, 0) -- Nằm rìa bên phải của zone
+		blocker.Anchored = true
+		blocker.CanCollide = false
+		blocker.Transparency = 0.5
+		blocker.Color = Color3.fromRGB(255, 50, 50)
+		blocker.Material = Enum.Material.Neon
+		blocker.Parent = gatesFolder
+
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = Enum.NormalId.Right
+		gui.Parent = blocker
+		local txt = Instance.new("TextLabel")
+		txt.Size = UDim2.new(1, 0, 1, 0)
+		txt.BackgroundTransparency = 1
+		txt.Text = "Requires " .. area.Req .. " Rebirths"
+		txt.TextScaled = true
+		txt.TextColor3 = Color3.new(1,1,1)
+		txt.Font = Enum.Font.GothamBold
+		txt.Parent = gui
+
+		table.insert(blockedGates, {
+			Req = area.Req,
+			Name = area.Name,
+			-- Vùng bị cấm: Kéo từ vị trí trung tâm boss room đến rìa phải trừ hao
+			MinX = area.Pos.X - (area.Size.X/2),
+			MaxX = blocker.Position.X + 2,
+			MinZ = area.Pos.Z - (area.Size.Z/2),
+			MaxZ = area.Pos.Z + (area.Size.Z/2),
+			PushBackTarget = blocker.Position + Vector3.new(15, 0, 0) -- 15 studs dội ngược lại
+		})
+	end
+
+	if RunService:IsRunning() then
+		RunService.Heartbeat:Connect(function()
+			for _, player in ipairs(game.Players:GetPlayers()) do
+				local char = player.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+				if not hrp then continue end
+
+				local pos = hrp.Position
+				for _, gate in ipairs(blockedGates) do
+					if pos.X < gate.MaxX and pos.X > gate.MinX and pos.Z < gate.MaxZ and pos.Z > gate.MinZ then
+						local ok, data = pcall(function() return DataService.GetData(player) end)
+						if ok and data and data.RebirthCount < gate.Req then
+							hrp.CFrame = CFrame.new(gate.PushBackTarget.X, hrp.Position.Y, gate.PushBackTarget.Z) * hrp.CFrame.Rotation
+							local lastNotif = player:GetAttribute("LastRebirthNotif_" .. gate.Name) or 0
+							if os.clock() - lastNotif > 2 then
+								player:SetAttribute("LastRebirthNotif_" .. gate.Name, os.clock())
+								Remotes.Events.Notification:FireClient(player, "❌ Cần " .. gate.Req .. " Rebirth để vào khu vực " .. gate.Name .. "!")
+							end
+						end
+					end
+				end
+			end
+		end)
+	end
 end
 
 -- Tạo các trạm chức năng (Nâng cấp, Pet, Rebirth)
@@ -223,6 +331,11 @@ local function createStations()
 		{ id = "Shop", name = "Upgrade Station", color = Color3.fromRGB(50, 150, 255), posOffset = Vector3.new(20, 2, -15) },
 		{ id = "Pet", name = "Pet Station", color = Color3.fromRGB(255, 200, 50), posOffset = Vector3.new(-20, 2, -15) },
 		{ id = "Rebirth", name = "Rebirth Station", color = Color3.fromRGB(150, 50, 200), posOffset = Vector3.new(0, 2, 25) },
+		{ id = "Skill", name = "Skill Scroll Gacha", color = Color3.fromRGB(180, 100, 255), posOffset = Config.Map.SkillStation.Position },
+		{ id = "Inventory", name = "My Inventory (Bag)", color = Color3.fromRGB(0, 255, 255), posOffset = Vector3.new(0, 2, -15) },
+		{ id = "Quest", name = "Quest Board", color = Color3.fromRGB(100, 255, 150), posOffset = Vector3.new(-25, 2, 20) },
+		{ id = "Reward", name = "Reward Chest", color = Color3.fromRGB(255, 100, 255), posOffset = Vector3.new(25, 2, 20) },
+		{ id = "Shout", name = "Speech Customizer", color = Color3.fromRGB(100, 100, 100), posOffset = Vector3.new(0, 2, -30) },
 	}
 
 	-- Tìm SafeZoneBase để lấy toạ độ gốc (nếu không có thì lấy 0,0,0)
@@ -236,24 +349,33 @@ local function createStations()
 	end
 
 	for _, data in ipairs(stationData) do
-		local part = Instance.new("Part")
-		part.Name = data.name
-		part.Size = Vector3.new(6, 4, 6)
-		part.Position = basePos + data.posOffset
-		part.Anchored = true
-		part.Color = data.color
-		part.Material = Enum.Material.Neon
-		part.Parent = stationsFolder
+		local part: Part
+		local existing = stationsFolder:FindFirstChild(data.name)
+		
+		if existing and existing:IsA("Part") then
+			part = existing
+		else
+			part = Instance.new("Part")
+			part.Name = data.name
+			part.Size = Vector3.new(6, 4, 6)
+			part.Position = basePos + data.posOffset
+			part.Anchored = true
+			part.Color = data.color
+			part.Material = Enum.Material.Neon
+			part.Parent = stationsFolder
+		end
 
-		-- Tạo ProximityPrompt
-		local prompt = Instance.new("ProximityPrompt")
-		prompt.Name = "Prompt_" .. data.id
-		prompt.ActionText = "Open"
-		prompt.ObjectText = data.name
-		prompt.KeyboardKeyCode = Enum.KeyCode.E
-		prompt.RequiresLineOfSight = false
-		prompt.MaxActivationDistance = 12
-		prompt.Parent = part
+		-- Tạo ProximityPrompt nếu chưa có
+		if not part:FindFirstChild("Prompt_" .. data.id) then
+			local prompt = Instance.new("ProximityPrompt")
+			prompt.Name = "Prompt_" .. data.id
+			prompt.ActionText = "Open"
+			prompt.ObjectText = data.name
+			prompt.KeyboardKeyCode = Enum.KeyCode.E
+			prompt.RequiresLineOfSight = false
+			prompt.MaxActivationDistance = 12
+			prompt.Parent = part
+		end
 	end
 end
 
@@ -261,42 +383,52 @@ end
 local function createLeaderboardBoard()
 	local mapFolder = workspace:FindFirstChild("Map")
 	if not mapFolder then return end
-	local board = Instance.new("Part")
-	board.Name = "GlobalLeaderboardBoard"
-	board.Size = Vector3.new(20, 15, 1)
-	board.Position = Vector3.new(0, 7.5, -45)
-	board.Anchored = true
-	board.Color = Color3.fromRGB(30, 30, 40)
-	board.Parent = mapFolder
+	
+	local board: Part
+	local existingBoard = mapFolder:FindFirstChild("GlobalLeaderboardBoard")
+	
+	if existingBoard and existingBoard:IsA("Part") then
+		board = existingBoard
+	else
+		board = Instance.new("Part")
+		board.Name = "GlobalLeaderboardBoard"
+		board.Size = Vector3.new(20, 15, 1)
+		board.Position = Vector3.new(0, 7.5, -45)
+		board.Anchored = true
+		board.Color = Color3.fromRGB(30, 30, 40)
+		board.Parent = mapFolder
+	end
 
-	local gui = Instance.new("SurfaceGui")
-	gui.Name = "LeaderboardGUI"
-	gui.Face = Enum.NormalId.Front
-	gui.CanvasSize = Vector2.new(800, 600)
-	gui.ResetOnSpawn = false
-	gui.Parent = board
+	if not board:FindFirstChild("LeaderboardGUI") then
+		local gui = Instance.new("SurfaceGui")
+		gui.Name = "LeaderboardGUI"
+		gui.Face = Enum.NormalId.Front
+		gui.CanvasSize = Vector2.new(800, 600)
+		gui.ResetOnSpawn = false
+		gui.Parent = board
 
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, 0, 0, 80)
-	title.BackgroundTransparency = 1
-	title.Text = "🏆 TOP VOCAL POINTS 🏆"
-	title.TextColor3 = Color3.fromRGB(255, 215, 0)
-	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 50
-	title.Parent = gui
+		local title = Instance.new("TextLabel")
+		title.Size = UDim2.new(1, 0, 0, 80)
+		title.BackgroundTransparency = 1
+		title.Text = "🏆 TOP VOCAL POINTS 🏆"
+		title.TextColor3 = Color3.fromRGB(255, 215, 0)
+		title.Font = Enum.Font.GothamBlack
+		title.TextSize = 50
+		title.Parent = gui
 
-	local listFrame = Instance.new("ScrollingFrame")
-	listFrame.Name = "ListFrame"
-	listFrame.Size = UDim2.new(1, -40, 1, -100)
-	listFrame.Position = UDim2.new(0, 20, 0, 90)
-	listFrame.BackgroundTransparency = 1
-	listFrame.ScrollBarThickness = 0
-	listFrame.Parent = gui
+		local listFrame = Instance.new("ScrollingFrame")
+		listFrame.Name = "ListFrame"
+		listFrame.Size = UDim2.new(1, -40, 1, -100)
+		listFrame.Position = UDim2.new(0, 20, 0, 90)
+		listFrame.BackgroundTransparency = 1
+		listFrame.ScrollBarThickness = 0
+		listFrame.Parent = gui
 
-	local layout = Instance.new("UIListLayout")
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, 5)
-	layout.Parent = listFrame
+		local layout = Instance.new("UIListLayout")
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
+		layout.Padding = UDim.new(0, 5)
+		layout.Parent = listFrame
+	end
 end
 
 function MapService.Init()
@@ -306,9 +438,10 @@ function MapService.Init()
 		createPvPArena()
 	end
 
-	local Shared = game.ReplicatedStorage:WaitForChild("Shared")
-	local Config = require(Shared:WaitForChild("Config"))
-
+	if Config.Map.StarterZone then
+		createZone("StarterZone", Config.Map.StarterZone, Color3.fromRGB(180, 255, 180), Enum.Material.Grass)
+	end
+	
 	if Config.Map.PvEZone then
 		createZone("PvEZone", Config.Map.PvEZone, Color3.fromRGB(150, 200, 100), Enum.Material.Grass)
 	end
@@ -317,7 +450,12 @@ function MapService.Init()
 		createZone("BossRoom", Config.Map.BossRoom, Color3.fromRGB(80, 80, 80), Enum.Material.Slate)
 	end
 	
+	if Config.Map.IceBossRoom then
+		createZone("IceBossRoom", Config.Map.IceBossRoom, Color3.fromRGB(173, 216, 230), Enum.Material.Ice)
+	end
+	
 	createRebirthAreas()
+	createBossRoomGates()
 	createStations()
 	createLeaderboardBoard()
 

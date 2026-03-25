@@ -16,7 +16,11 @@ end)
 
 local Shop = {}
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
+
+local function getPlayerGui(): PlayerGui?
+	if not LocalPlayer then return nil end
+	return LocalPlayer:FindFirstChildOfClass("PlayerGui")
+end
 
 local shopScreen: ScreenGui? = nil
 local isOpen = false
@@ -207,7 +211,7 @@ local function createUpgradeCard(parent: Instance, cfg: any, index: number): Fra
 	iconLbl.Size = UDim2.new(1, 0, 1, -15)
 	iconLbl.Position = UDim2.new(0, 0, 0, 0)
 	iconLbl.BackgroundTransparency = 1
-	iconLbl.Text = (cfg.Category == "Attack") and "🎙️" or "🔊"
+	iconLbl.Text = (cfg.Id == "damage_1") and "🎙️" or (cfg.Id == "health_1" and "❤️" or "🛡️")
 	iconLbl.TextSize = 50
 	iconLbl.Parent = iconFrame
 
@@ -275,8 +279,12 @@ local function createUpgradeCard(parent: Instance, cfg: any, index: number): Fra
 	local fillGradient = Instance.new("UIGradient")
 	fillGradient.Color = ColorSequence.new(Color3.fromRGB(255, 200, 50), Color3.fromRGB(255, 140, 20))
 	if cfg.Category == "Defense" then
-		fillGradient.Color = ColorSequence.new(Color3.fromRGB(50, 200, 255), Color3.fromRGB(20, 140, 255))
-		glowBase.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+		fillGradient.Color = ColorSequence.new(Color3.fromRGB(50, 255, 120), Color3.fromRGB(20, 200, 80))
+		glowBase.BackgroundColor3 = Color3.fromRGB(100, 255, 150)
+		if cfg.Id == "armor_1" then
+			fillGradient.Color = ColorSequence.new(Color3.fromRGB(50, 200, 255), Color3.fromRGB(20, 140, 255))
+			glowBase.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+		end
 	end
 	fillGradient.Parent = progFill
 
@@ -327,9 +335,8 @@ local function createUpgradeCard(parent: Instance, cfg: any, index: number): Fra
 		if not data then return end
 
 		local currentLevel: number
-		if cfg.Id == "microphone_1" then currentLevel = data.AttackUpgradeLevel
-		elseif cfg.Id == "speaker_1" then currentLevel = data.SpeakerUpgradeLevel
-		elseif cfg.Id == "headphone_1" then currentLevel = data.DefenseUpgradeLevel
+		if cfg.Id == "damage_1" then currentLevel = data.DamageUpgradeLevel
+		elseif cfg.Id == "health_1" then currentLevel = data.HealthUpgradeLevel
 		elseif cfg.Id == "armor_1" then currentLevel = data.ArmorUpgradeLevel
 		else currentLevel = 0 end
 
@@ -341,7 +348,7 @@ local function createUpgradeCard(parent: Instance, cfg: any, index: number): Fra
 		local fillRatio = mathLevel / cfg.MaxLevel
 		TweenService:Create(progFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(fillRatio, 0, 1, 0)}):Play()
 
-		local canAfford = data.Gold >= cost
+		local canAfford = data.VocalPoints >= cost
 		local maxed     = currentLevel >= cfg.MaxLevel
 
 		if maxed then
@@ -397,7 +404,7 @@ local function buildShop(): ScreenGui
 	panel.Size              = UDim2.new(0, 520, 0, 580)
 	panel.Position          = UDim2.new(0.5, -260, 0.5, -290)
 	panel.BackgroundColor3  = Config.Theme.Background
-	panel.BackgroundTransparency = Config.Theme.Transparency
+	panel.BackgroundTransparency = Config.Theme.PanelTransparency
 	panel.BorderSizePixel   = 0
 	panel.Parent            = screen
 
@@ -424,7 +431,8 @@ local function buildShop(): ScreenGui
 	title.Parent            = panel
 
 	local titleGradient = Instance.new("UIGradient")
-	titleGradient.Color = ColorSequence.new(Config.Theme.PrimaryGradient[1], Config.Theme.PrimaryGradient[2])
+	titleGradient.Color = ColorSequence.new(Config.Theme.PanelGradient[1], Config.Theme.PanelGradient[2])
+	titleGradient.Rotation = 90
 	titleGradient.Parent = title
 
 	local cornerTitle = Instance.new("UICorner")
@@ -583,10 +591,41 @@ end
 -- ============================================================
 -- PUBLIC API
 -- ============================================================
-function Shop.Init()
+function Shop.Init(overrideParent: Instance?)
+	local pg = overrideParent or getPlayerGui()
+	if not pg then return end
+	
+	-- [SMART BINDING] Detect existing Shop
+	local existing: ScreenGui? = nil
+	for _, child in ipairs(pg:GetChildren()) do
+		if child:IsA("ScreenGui") then
+			if child.Name == "Shop" or child:FindFirstChild("Panel", true) then
+				if not existing then
+					existing = child
+				else
+					child:Destroy()
+				end
+			end
+		end
+	end
+	
+	if existing then
+		shopScreen = existing
+		print("ℹ️ [Shop] Using existing ScreenGui for smart binding.")
+		return
+	end
+
 	local screen = buildShop()
-	screen.Parent = PlayerGui
+	screen.Parent = pg
 	shopScreen = screen
+	
+	-- Populate initial cards for Studio/Bake mode
+	pcall(function()
+		local scroll = screen:FindFirstChild("CardList", true) :: ScrollingFrame?
+		if scroll and #scroll:GetChildren() <= 2 then -- Only if empty (UIListLayout + UIGradient count as children)
+			-- Logic to show initial tab if needed
+		end
+	end)
 end
 
 function Shop.Open()

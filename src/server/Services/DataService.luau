@@ -6,6 +6,7 @@
 
 local Players         = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
+local RunService      = game:GetService("RunService")
 
 local Shared   = game.ReplicatedStorage.Shared
 local Config   = require(Shared.Config)
@@ -53,16 +54,40 @@ local function safeSet(key: string, value: any)
 end
 
 -- Deep copy bảng để tránh reference bugs
-local function deepCopy(t: Types.PlayerData): Types.PlayerData
-	local copy = {} :: any
-	for k, v in pairs(t :: any) do
+local function deepCopy(t: any): any
+	local copy = {}
+	for k, v in pairs(t) do
 		if type(v) == "table" then
-			copy[k] = deepCopy(v :: any)
+			copy[k] = deepCopy(v)
 		else
 			copy[k] = v
 		end
 	end
-	return copy :: Types.PlayerData
+	return copy
+end
+
+-- ============================================================
+-- RESET LOGIC
+-- ============================================================
+local function performDailyReset(player: Player, data: Types.PlayerData)
+	local currentUtcDate = os.date("!%Y-%m-%d")
+	
+	data.Quests = {}
+	data.ClaimedQuests = {}
+	data.PlayTime = 0
+	data.ClaimedPlaytimeRewards = {}
+	data.QuestResetDate = currentUtcDate
+	
+	-- Notify client of full reset if they are already online
+	DataService.UpdateFields(player, {
+		Quests = data.Quests,
+		ClaimedQuests = data.ClaimedQuests,
+		PlayTime = data.PlayTime,
+		ClaimedPlaytimeRewards = data.ClaimedPlaytimeRewards,
+		QuestResetDate = data.QuestResetDate
+	})
+	
+	print("[DataService] Performed daily reset for", player.Name)
 end
 
 -- ============================================================
@@ -83,11 +108,18 @@ local function loadData(player: Player): Types.PlayerData
 			merged_any[k] = v
 		end
 		
-		-- Daily Quest Reset
+		-- Migration: Khởi tạo TotalVocalPoints cho người chơi cũ
+		if (merged.TotalVocalPoints == nil or merged.TotalVocalPoints == 0) and merged.VocalPoints > 0 then
+			merged.TotalVocalPoints = merged.VocalPoints
+		end
+
+		-- Daily Quest & Playtime Reset
 		local currentUtcDate = os.date("!%Y-%m-%d")
 		if merged.QuestResetDate ~= currentUtcDate then
 			merged.Quests = {}
 			merged.ClaimedQuests = {}
+			merged.PlayTime = 0
+			merged.ClaimedPlaytimeRewards = {}
 			merged.QuestResetDate = currentUtcDate
 		end
 		
@@ -98,6 +130,28 @@ local function loadData(player: Player): Types.PlayerData
 		local data_any = data :: any
 		data_any.JoinDate = os.time()
 		data_any.QuestResetDate = os.date("!%Y-%m-%d")
+
+		-- Cấp skill khởi đầu (skill đầu tiên không phải basic)
+		local starterSkillCfg = Config.Skills[2] -- Loud Cry (hoặc tìm động)
+		for _, cfg in ipairs(Config.Skills) do
+			if not cfg.IsBasic then
+				starterSkillCfg = cfg
+				break
+			end
+		end
+
+		local starterSkill: Types.SkillData = {
+			Id         = "starter_shout_" .. tostring(userId),
+			SkillType  = starterSkillCfg.SkillType,
+			Rarity     = starterSkillCfg.Rarity,
+			DamageMult = starterSkillCfg.DamageMult,
+			Cooldown   = starterSkillCfg.Cooldown,
+			Equipped   = true,
+			SlotIndex  = 1,
+		}
+		table.insert(data.Skills, starterSkill)
+		data.EquippedSkillIds = { [1] = starterSkill.Id }
+
 		return data
 	end
 end
@@ -166,6 +220,16 @@ local function onPlayerAdded(player: Player)
 
 	-- Gửi full data xuống client
 	Remotes.Events.PlayerDataLoaded:FireClient(player, data :: any)
+	
+	-- Apply MaxHealth to char
+	local function applyStats(char: Model)
+		local hum = char:WaitForChild("Humanoid") :: Humanoid
+		hum.MaxHealth = data.MaxHealth
+		hum.Health = data.MaxHealth
+	end
+	if player.Character then applyStats(player.Character) end
+	player.CharacterAdded:Connect(applyStats)
+
 	print("[DataService] Loaded data for", player.Name)
 end
 
@@ -182,9 +246,15 @@ end
 task.spawn(function()
 	while true do
 		task.wait(Config.DataSaveInterval)
-		for userId, _ in pairs(ActiveSessions) do
+		for userId, session in pairs(ActiveSessions) do
 			local player = Players:GetPlayerByUserId(userId)
 			if player then
+				-- Check mid-session daily reset
+				local currentUtcDate = os.date("!%Y-%m-%d")
+				if session.QuestResetDate ~= currentUtcDate then
+					performDailyReset(player, session)
+				end
+				
 				saveData(player)
 			end
 		end
@@ -194,19 +264,21 @@ end)
 -- ============================================================
 -- BIND EVENTS
 -- ============================================================
-Players.PlayerAdded:Connect(onPlayerAdded)
-Players.PlayerRemoving:Connect(onPlayerRemoving)
+if RunService:IsRunning() then
+	Players.PlayerAdded:Connect(onPlayerAdded)
+	Players.PlayerRemoving:Connect(onPlayerRemoving)
 
--- Bắt các player đã join trước khi script load (Play Solo trong Studio)
-for _, player in ipairs(Players:GetPlayers()) do
-	task.spawn(onPlayerAdded, player)
-end
-
--- Save all on server close
-game:BindToClose(function()
+	-- Bắt các player đã join trước khi script load (Play Solo trong Studio)
 	for _, player in ipairs(Players:GetPlayers()) do
-		saveData(player)
+		task.spawn(onPlayerAdded, player)
 	end
-end)
+
+	-- Save all on server close
+	game:BindToClose(function()
+		for _, player in ipairs(Players:GetPlayers()) do
+			saveData(player)
+		end
+	end)
+end
 
 return DataService

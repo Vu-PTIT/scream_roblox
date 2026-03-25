@@ -21,8 +21,8 @@ local function onRebirthRequest(player: Player)
 	if not data then return end
 
 	-- Kiểm tra điều kiện
-	if data.VocalPoints < Config.Rebirth.VocalPointsRequired then
-		local needed = Config.Rebirth.VocalPointsRequired - data.VocalPoints
+	if (data.TotalVocalPoints or 0) < Config.Rebirth.VocalPointsRequired then
+		local needed = Config.Rebirth.VocalPointsRequired - (data.TotalVocalPoints or 0)
 		Remotes.Events.Notification:FireClient(
 			player,
 			string.format(Config.Localization.Notifications.RebirthNeeded, math.ceil(needed))
@@ -41,13 +41,14 @@ local function onRebirthRequest(player: Player)
 	DataService.UpdateFields(player, {
 		-- Reset tiến trình
 		VocalPoints         = 0,
+		TotalVocalPoints    = 0,
 		Gold                = 0,
 		Cups                = 0,
 		Attack              = defaultData.Attack,
 		Defense             = defaultData.Defense,
-		AttackUpgradeLevel  = 0,
-		SpeakerUpgradeLevel = 0,
-		DefenseUpgradeLevel = 0,
+		MaxHealth           = defaultData.MaxHealth,
+		DamageUpgradeLevel  = 0,
+		HealthUpgradeLevel  = 0,
 		ArmorUpgradeLevel   = 0,
 		-- Giữ pets (không reset)
 		-- Cộng rebirth

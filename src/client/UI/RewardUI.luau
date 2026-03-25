@@ -15,7 +15,11 @@ end)
 
 local RewardUI = {}
 local LocalPlayer   = Players.LocalPlayer
-local PlayerGui     = LocalPlayer:WaitForChild("PlayerGui")
+
+local function getPlayerGui(): PlayerGui?
+	if not LocalPlayer then return nil end
+	return LocalPlayer:FindFirstChildOfClass("PlayerGui")
+end
 
 local rewardScreen: ScreenGui? = nil
 local isOpen = false
@@ -25,14 +29,23 @@ local function buildUI(): ScreenGui
 	screen.Name            = "RewardUI"
 	screen.ResetOnSpawn    = false
 	screen.DisplayOrder    = 20
+	screen.IgnoreGuiInset  = true
 	screen.Enabled         = false
+
+	local overlay           = Instance.new("Frame")
+	overlay.Size            = UDim2.new(1, 0, 1, 0)
+	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	overlay.BackgroundTransparency = 0.5
+	overlay.BorderSizePixel = 0
+	overlay.Parent          = screen
 
 	local panel            = Instance.new("Frame")
 	panel.Name             = "Panel"
-	panel.Size             = UDim2.new(0, 400, 0, 360)
-	panel.Position         = UDim2.new(0.5, -200, 0.5, -180)
+	panel.Size             = UDim2.new(0, 480, 0, 460)
+	panel.Position         = UDim2.new(0.5, 0, 0.5, 0)
+	panel.AnchorPoint      = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3 = Config.Theme.Background
-	panel.BackgroundTransparency = Config.Theme.Transparency
+	panel.BackgroundTransparency = Config.Theme.PanelTransparency
 	panel.BorderSizePixel  = 0
 	panel.Parent           = screen
 
@@ -45,73 +58,91 @@ local function buildUI(): ScreenGui
 	stroke.Thickness = Config.Theme.StrokeThickness
 	stroke.Transparency = 0.3
 	stroke.Parent = panel
+	
+	local grad = Instance.new("UIGradient")
+	grad.Color = ColorSequence.new(Config.Theme.PanelGradient[1], Config.Theme.PanelGradient[2])
+	grad.Rotation = 45
+	grad.Parent = panel
 
 	local title    = Instance.new("TextLabel")
-	title.Size     = UDim2.new(1, 0, 0, 48)
+	title.Size     = UDim2.new(1, 0, 0, 64)
 	title.BackgroundTransparency = 1
-	title.Text     = "⏱️ " .. Config.Localization.RewardUI.Title
+	title.Text     = "PLAYTIME REWARDS"
 	title.TextColor3 = Config.Theme.TextMain
 	title.Font     = Enum.Font.GothamBlack
-	title.TextSize = 22
+	title.TextSize = 24
 	title.Parent   = panel
 
 	local closeBtn = Instance.new("TextButton")
-	closeBtn.Size  = UDim2.new(0, 40, 0, 40)
-	closeBtn.Position = UDim2.new(1, -45, 0, 4)
-	closeBtn.BackgroundTransparency = 1
-	closeBtn.Text  = "❌"
-	closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+	closeBtn.Size  = UDim2.new(0, 44, 0, 44)
+	closeBtn.Position = UDim2.new(1, -54, 0, 10)
+	closeBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+	closeBtn.Text  = "✕"
+	closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	closeBtn.Font  = Enum.Font.GothamBold
 	closeBtn.TextSize = 20
-	closeBtn.Font = Enum.Font.GothamBold
+	closeBtn.BorderSizePixel = 0
 	closeBtn.Parent = panel
+	
+	local cornerClose = Instance.new("UICorner")
+	cornerClose.CornerRadius = UDim.new(0, 10)
+	cornerClose.Parent = closeBtn
 
-	closeBtn.Activated:Connect(function()
-		RewardUI.Close()
-	end)
+	closeBtn.Activated:Connect(function() RewardUI.Close() end)
 
 	local listFrame = Instance.new("ScrollingFrame")
-	listFrame.Size = UDim2.new(1, -30, 1, -65)
-	listFrame.Position = UDim2.new(0, 15, 0, 50)
+	listFrame.Name = "RewardList"
+	listFrame.Size = UDim2.new(1, -30, 1, -85)
+	listFrame.Position = UDim2.new(0, 15, 0, 70)
 	listFrame.BackgroundTransparency = 1
 	listFrame.ScrollBarThickness = 4
+	listFrame.ScrollBarImageColor3 = Config.Theme.BtnRewardBase
+	listFrame.BorderSizePixel = 0
 	listFrame.Parent = panel
 	
 	local layout = Instance.new("UIListLayout")
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, 10)
+	layout.Padding = UDim.new(0, 12)
 	layout.Parent = listFrame
 
 	for i, milestone in ipairs(Config.Rewards.PlaytimeMilestones) do
 		local item = Instance.new("Frame")
 		item.Name = "Milestone_" .. tostring(i)
-		item.Size = UDim2.new(1, -10, 0, 65)
+		item.Size = UDim2.new(1, -10, 0, 80)
 		item.BackgroundColor3 = Config.Theme.SecondaryBackground
+		item.BackgroundTransparency = 0.3
 		item.BorderSizePixel = 0
 		item.LayoutOrder = i
 		item.Parent = listFrame
 		
 		local itemCorner = Instance.new("UICorner")
-		itemCorner.CornerRadius = UDim.new(0, 8)
+		itemCorner.CornerRadius = UDim.new(0, 12)
 		itemCorner.Parent = item
+		
+		local itemStroke = Instance.new("UIStroke")
+		itemStroke.Color = Config.Theme.StrokeColor
+		itemStroke.Thickness = 1
+		itemStroke.Transparency = 0.5
+		itemStroke.Parent = item
 		
 		local minutes = math.floor(milestone.Time / 60)
 		local timeLabel = Instance.new("TextLabel")
-		timeLabel.Size = UDim2.new(0.6, 0, 0.5, 0)
-		timeLabel.Position = UDim2.new(0, 10, 0, 5)
+		timeLabel.Size = UDim2.new(0.65, 0, 0, 24)
+		timeLabel.Position = UDim2.new(0, 15, 0, 15)
 		timeLabel.BackgroundTransparency = 1
-		timeLabel.Text = string.format(Config.Localization.RewardUI.TimeFormat, minutes)
+		timeLabel.Text = string.format("TIME: %d MINUTES", minutes)
 		timeLabel.TextColor3 = Config.Theme.TextMain
 		timeLabel.Font = Enum.Font.GothamBold
 		timeLabel.TextSize = 16
 		timeLabel.TextXAlignment = Enum.TextXAlignment.Left
 		timeLabel.Parent = item
 		
-		local rewardStr = string.format(Config.Localization.RewardUI.RewardFormat, tostring(milestone.Reward.Amount), milestone.Reward.Type)
+		local rewardStr = string.format("%s %s", tostring(milestone.Reward.Amount), milestone.Reward.Type)
 		local rewardLabel = Instance.new("TextLabel")
-		rewardLabel.Size = UDim2.new(0.6, 0, 0.5, 0)
-		rewardLabel.Position = UDim2.new(0, 10, 0.5, -5)
+		rewardLabel.Size = UDim2.new(0.65, 0, 0, 20)
+		rewardLabel.Position = UDim2.new(0, 15, 0, 40)
 		rewardLabel.BackgroundTransparency = 1
-		rewardLabel.Text = "🎁 " .. rewardStr
+		rewardLabel.Text = "🎁 REWARD: " .. rewardStr
 		rewardLabel.TextColor3 = Config.Theme.TextGold
 		rewardLabel.Font = Enum.Font.Gotham
 		rewardLabel.TextSize = 14
@@ -120,36 +151,37 @@ local function buildUI(): ScreenGui
 		
 		local claimBtn = Instance.new("TextButton")
 		claimBtn.Name = "ClaimButton"
-		claimBtn.Size = UDim2.new(0, 100, 0, 40)
-		claimBtn.Position = UDim2.new(1, -110, 0.5, -20)
+		claimBtn.Size = UDim2.new(0, 120, 0, 44)
+		claimBtn.Position = UDim2.new(1, -135, 0.5, -22)
 		claimBtn.BackgroundColor3 = Config.Theme.BtnRewardBase
-		claimBtn.Text = Config.Localization.RewardUI.Locked
+		claimBtn.Text = "LOCKED"
 		claimBtn.TextColor3 = Config.Theme.TextMain
 		claimBtn.Font = Enum.Font.GothamBold
 		claimBtn.TextSize = 14
+		claimBtn.BorderSizePixel = 0
 		claimBtn.Parent = item
 		
 		local btnCorner = Instance.new("UICorner")
-		btnCorner.CornerRadius = UDim.new(0, 8)
+		btnCorner.CornerRadius = UDim.new(0, 22)
 		btnCorner.Parent = claimBtn
 		
 		claimBtn.Activated:Connect(function()
-			if claimBtn.Text == Config.Localization.RewardUI.Claim then
+			if claimBtn.Text == "CLAIM" then
 				Remotes.Events.ClaimPlaytimeReward:FireServer(i)
 			end
 		end)
 	end
 	
-	listFrame.CanvasSize = UDim2.new(0, 0, 0, #Config.Rewards.PlaytimeMilestones * 75)
+	listFrame.CanvasSize = UDim2.new(0, 0, 0, #Config.Rewards.PlaytimeMilestones * 92 + 10)
 
 	return screen
 end
 
 local function updateUIState()
 	if not rewardScreen or not DataController then return end
-	local panel = rewardScreen:FindFirstChild("Panel")
+	local panel = (rewardScreen :: any):FindFirstChild("Panel")
 	if not panel then return end
-	local listFrame = panel:FindFirstChild("ScrollingFrame")
+	local listFrame = panel:FindFirstChild("RewardList")
 	if not listFrame then return end
 	
 	local data = DataController.GetData()
@@ -164,14 +196,13 @@ local function updateUIState()
 			local btn = item:FindFirstChild("ClaimButton") :: TextButton
 			if btn then
 				if claimed[tostring(i)] then
-					btn.Text = Config.Localization.RewardUI.Claimed
-					btn.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+					btn.Text = "CLAIMED"
+					btn.BackgroundColor3 = Color3.fromRGB(60, 65, 90)
 				elseif playtime >= milestone.Time then
-					btn.Text = Config.Localization.RewardUI.Claim
-					-- Missing gradient definition locally, simplify color
-					btn.BackgroundColor3 = Color3.fromRGB(80, 180, 80)
+					btn.Text = "CLAIM"
+					btn.BackgroundColor3 = Color3.fromRGB(60, 210, 160)
 				else
-					btn.Text = Config.Localization.RewardUI.Locked
+					btn.Text = "LOCKED"
 					btn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
 				end
 			end
@@ -179,10 +210,32 @@ local function updateUIState()
 	end
 end
 
-function RewardUI.Init()
-	local screen = buildUI()
-	screen.Parent = PlayerGui
-	rewardScreen = screen
+function RewardUI.Init(overrideParent: Instance?)
+	local pg = overrideParent or getPlayerGui()
+	if not pg then return end
+	
+	-- [SMART BINDING] Detect existing RewardUI
+	local existing: ScreenGui? = nil
+	for _, child in ipairs(pg:GetChildren()) do
+		if child:IsA("ScreenGui") then
+			if child.Name == "RewardUI" or child:FindFirstChild("RewardList", true) then
+				if not existing then
+					existing = child
+				else
+					child:Destroy()
+				end
+			end
+		end
+	end
+	
+	if existing then
+		rewardScreen = existing
+		print("ℹ️ [RewardUI] Using existing ScreenGui for smart binding.")
+	else
+		local screen = buildUI()
+		screen.Parent = pg
+		rewardScreen = screen
+	end
 	
 	task.defer(function()
 		task.wait(0.5)

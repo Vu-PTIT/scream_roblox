@@ -26,11 +26,41 @@ local LocalPlayer   = Players.LocalPlayer
 local Camera        = workspace.CurrentCamera
 local PlayerGui     = LocalPlayer:WaitForChild("PlayerGui")
 
-local lastShoutTime = 0
+local lastShoutTimes = { [0] = 0, [1] = 0, [2] = 0 }
 local isCharging     = false
 local chargeStartTime = 0
 local auraEmitter: ParticleEmitter? = nil
 local auraLight: PointLight? = nil
+local CurrentChargingSlot: number? = nil
+local SelectedSkillSlot: number = 0
+
+local function getEquippedSkillConfig(slotIndex: number)
+	if slotIndex == 0 then
+		-- Tìm Basic Shout trong Config
+		for _, cfg in ipairs(Config.Skills) do
+			if cfg.IsBasic then return cfg end
+		end
+		return Config.Skills[1]
+	end
+
+	if not DataController then return Config.Skills[1] end
+	local data = DataController.GetData()
+	if not data or not data.EquippedSkillIds then return Config.Skills[1] end
+
+	local skillId = data.EquippedSkillIds[slotIndex]
+	if not skillId then return nil end -- Không có skill ở slot này
+
+	for _, skill in ipairs(data.Skills or {}) do
+		if skill.Id == skillId then
+			for _, cfg in ipairs(Config.Skills) do
+				if cfg.SkillType == skill.SkillType then
+					return cfg
+				end
+			end
+		end
+	end
+	return nil
+end
 
 -- BILLBOARD SHOUT
 local shoutBillboard: BillboardGui? = nil
@@ -104,63 +134,6 @@ local function _cameraShake(magnitude: number, duration: number)
 	end)
 end
 
-RunService.RenderStepped:Connect(function(dt: number)
-	local char = LocalPlayer.Character
-	if not char then return end
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if not hum then return end
-
-	-- 1. Xử lý Camera Shake (Knockback hoặc Charging)
-	if shakeActive and shakeMagnitude > 0 then
-		local m = shakeMagnitude
-		local offset = Vector3.new(
-			(math.random() - 0.5) * 2 * m,
-			(math.random() - 0.5) * 2 * m * 0.5,
-			(math.random() - 0.5) * 2 * m
-		)
-		hum.CameraOffset = offset
-		shakeMagnitude = math.max(0, shakeMagnitude - shakeDecay * dt)
-	elseif not isCharging then
-		hum.CameraOffset = hum.CameraOffset:Lerp(Vector3.new(0, 0, 0), 0.1)
-	end
-
-	-- 2. Xử lý logic Gồng lực (Charging)
-	if isCharging then
-		local elapsed = os.clock() - chargeStartTime
-		local chargeRatio = math.min(1, elapsed / Config.Shout.Charge.MaxTime)
-
-		-- Camera FOV narrowing
-		Camera.FieldOfView = 70 - (chargeRatio * 15)
-
-		-- Constant small shake during charge
-		local shakeM = 0.05 + (chargeRatio * 0.2)
-		hum.CameraOffset = Vector3.new(
-			(math.random() - 0.5) * shakeM,
-			(math.random() - 0.5) * shakeM,
-			(math.random() - 0.5) * shakeM
-		)
-
-		-- Update Aura Color based on current level
-		if auraEmitter then
-			local currentLevel = Config.Shout.Charge.Levels[1]
-			for _, lvl in ipairs(Config.Shout.Charge.Levels) do
-				if elapsed >= lvl.Time then
-					currentLevel = lvl
-				end
-			end
-			auraEmitter.Color = ColorSequence.new(currentLevel.Color)
-			if auraLight then auraLight.Color = currentLevel.Color end
-		end
-		
-		-- Slow down player
-		hum.WalkSpeed = 6 -- Rất chậm khi đang gồng
-	else
-		-- Restore FOV & Speed
-		Camera.FieldOfView = math.lerp(Camera.FieldOfView, 70, 0.1)
-		hum.WalkSpeed = 16
-	end
-end)
-
 local function createAura(character : Model)
 	local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not hrp then return end
@@ -214,6 +187,87 @@ local function removeAura()
 	end
 end
 
+RunService.RenderStepped:Connect(function(dt: number)
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+
+	-- 1. Xử lý Camera Shake (Knockback hoặc Charging)
+	if shakeActive and shakeMagnitude > 0 then
+		local m = shakeMagnitude
+		local offset = Vector3.new(
+			(math.random() - 0.5) * 2 * m,
+			(math.random() - 0.5) * 2 * m * 0.5,
+			(math.random() - 0.5) * 2 * m
+		)
+		hum.CameraOffset = offset
+		shakeMagnitude = math.max(0, shakeMagnitude - shakeDecay * dt)
+	elseif not isCharging then
+		hum.CameraOffset = hum.CameraOffset:Lerp(Vector3.new(0, 0, 0), 0.1)
+	end
+
+	-- 2. Xử lý logic Gồng lực (Charging)
+	local targetSpeed = 16
+	local targetFOV = 70
+	local chargeOffset = Vector3.new(0, 0, 0)
+	
+	if isCharging then
+		local elapsed = os.clock() - chargeStartTime
+		local chargeRatio = math.min(1, elapsed / Config.Shout.Charge.MaxTime)
+
+		-- Constant small shake during charge
+		local shakeM = 0.05 + (chargeRatio * 0.2)
+		chargeOffset = Vector3.new(
+			(math.random() - 0.5) * shakeM,
+			(math.random() - 0.5) * shakeM,
+			(math.random() - 0.5) * shakeM
+		)
+
+		-- Update Aura Color
+		if auraEmitter then
+			local currentLevel = Config.Shout.Charge.Levels[1]
+			for _, lvl in ipairs(Config.Shout.Charge.Levels) do
+				if elapsed >= lvl.Time then
+					currentLevel = lvl
+				end
+			end
+			auraEmitter.Color = ColorSequence.new(currentLevel.Color)
+			if auraLight then auraLight.Color = currentLevel.Color end
+		end
+		
+		-- Slow down & FOV only if charging significantly (> 0.2s)
+		if elapsed > 0.2 then
+			targetSpeed = 6
+			local fovRatio = math.min(1, (elapsed - 0.2) / (Config.Shout.Charge.MaxTime - 0.2))
+			targetFOV = 70 - (fovRatio * 15)
+
+			-- Create Aura if not already present
+			if not auraEmitter and LocalPlayer.Character then
+				createAura(LocalPlayer.Character)
+			end
+		end
+	end
+
+	-- Combine offsets and apply smoothly
+	local finalOffset = (shakeMagnitude > 0 and hum.CameraOffset) or chargeOffset
+	if not isCharging and shakeMagnitude <= 0 then
+		finalOffset = hum.CameraOffset:Lerp(Vector3.new(0, 0, 0), 0.1)
+	end
+	hum.CameraOffset = finalOffset
+
+	-- Smooth transition for Speed & FOV (Only set if different enough to prevent physics hitching)
+	local newSpeed = hum.WalkSpeed + (targetSpeed - hum.WalkSpeed) * 0.15
+	if math.abs(hum.WalkSpeed - newSpeed) > 0.01 then
+		hum.WalkSpeed = newSpeed
+	end
+
+	local newFOV = Camera.FieldOfView + (targetFOV - Camera.FieldOfView) * 0.15
+	if math.abs(Camera.FieldOfView - newFOV) > 0.01 then
+		Camera.FieldOfView = newFOV
+	end
+end)
+
 local function createImpactFlash()
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "ImpactFlash"
@@ -231,23 +285,22 @@ local function createImpactFlash()
 	game:GetService("Debris"):AddItem(screenGui, 0.2)
 end
 
-local function performShout(overrideDirection: Vector3?, powerMult: number?)
+local function performShout(slotIndex: number, overrideDirection: Vector3?, powerMult: number?)
 	local pMult = powerMult or 1.0
 	local character = LocalPlayer.Character
 	if not character then return end
 	local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not hrp then return end
 	
-	local currentShoutType = "Normal"
-	if DataController then
-		currentShoutType = DataController.Get("CurrentShoutType") or "Normal"
-	end
+	local skillConfig = getEquippedSkillConfig(slotIndex)
+	if not skillConfig then return end
 	
-	local shoutConfig = Config.ShoutTypes[currentShoutType] or Config.ShoutTypes.Normal
+	local shoutConfig = Config.ShoutTypes[skillConfig.ShoutTypeId] or Config.ShoutTypes.Normal
 	
 	local now = os.clock()
-	if now - lastShoutTime < shoutConfig.Cooldown then return end
-	lastShoutTime = now
+	local lastTime = lastShoutTimes[slotIndex] or 0
+	if now - lastTime < skillConfig.Cooldown then return end
+	lastShoutTimes[slotIndex] = now
 
 	local direction = Vector3.new(0, 0, -1)
 	if overrideDirection then
@@ -263,13 +316,15 @@ local function performShout(overrideDirection: Vector3?, powerMult: number?)
 	if DataController then
 		local data = DataController.GetData()
 		if data then
-			attackPower = data.Attack + (data.AttackUpgradeLevel * Config.Upgrades[1].StatPerLevel) + ((data.SpeakerUpgradeLevel or 0) * Config.Upgrades[2].StatPerLevel)
+			attackPower = data.Attack + (data.DamageUpgradeLevel * Config.Upgrades[1].StatPerLevel)
 		end
 	end
 
-	-- Multiply power if charged
-	local chargePower = attackPower * pMult * shoutConfig.DamageMult
-	ShoutWave.Play(originCFrame, chargePower, shoutConfig)
+	-- Calculate base skill power (without charge)
+	local baseSkillPower = attackPower * skillConfig.DamageMult
+	local rarityColor = Config.Theme.RarityColors and Config.Theme.RarityColors[skillConfig.Rarity]
+	
+	ShoutWave.Play(originCFrame, baseSkillPower, shoutConfig, rarityColor, pMult)
 
 	local shoutText = "AAAAHHH!!!"
 	if pMult >= 3 then
@@ -295,42 +350,77 @@ local function performShout(overrideDirection: Vector3?, powerMult: number?)
 		game:GetService("Debris"):AddItem(shoutSound, 3)
 	end
 
-	-- Camera Kick-back
-	local kickForce = 0.3 * pMult
-	TweenService:Create(
-		Camera,
-		TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true),
-		{ CFrame = Camera.CFrame * CFrame.new(0, 0, kickForce) }
-	):Play()
+	-- Camera Kick-back (Dùng CameraOffset thay vì CFrame Tween để tránh khựng)
+	local kickIntensity = 0.5 * pMult
+	_cameraShake(kickIntensity, 0.15)
 
-	Remotes.Events.ShoutFired:FireServer(direction, pMult)
+	Remotes.Events.ShoutFired:FireServer(direction, pMult, slotIndex)
 end
 
 UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
 	if gameProcessed then return end
+	
+	local slotToCharge: number? = nil
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		local currentShoutType = DataController and DataController.Get("CurrentShoutType") or "Normal"
-		local cooldown = Config.ShoutTypes[currentShoutType] and Config.ShoutTypes[currentShoutType].Cooldown or Config.Shout.Cooldown
-		
-		if os.clock() - lastShoutTime < cooldown then return end
-		isCharging = true
-		chargeStartTime = os.clock()
-		if LocalPlayer.Character then createAura(LocalPlayer.Character) end
-	end
-	if input.KeyCode == Enum.KeyCode.Space then
-		performShout(Vector3.new(0, -1, 0), 1)
+		-- Execute: Chọn slot để gồng dựa trên SelectedSkillSlot + Cooldown
+		local slotToTry = SelectedSkillSlot
+		if slotToTry > 0 then
+			local lastTime = lastShoutTimes[slotToTry] or 0
+			local skillConfig = getEquippedSkillConfig(slotToTry)
+			local cd = skillConfig and skillConfig.Cooldown or 0.8
+			
+			if os.clock() - lastTime < cd then
+				-- Đang hồi chiêu -> Fallback về Basic (Slot 0)
+				slotToTry = 0
+			end
+		end
+		slotToCharge = slotToTry
 	elseif input.KeyCode == Enum.KeyCode.One then
-		Remotes.Events.SetShoutType:FireServer("Normal")
+		-- Select only
+		SelectedSkillSlot = 1
+		print("[ShoutController] Selected Skill Slot 1")
+		return
 	elseif input.KeyCode == Enum.KeyCode.Two then
-		Remotes.Events.SetShoutType:FireServer("Circular")
-	elseif input.KeyCode == Enum.KeyCode.Three then
-		Remotes.Events.SetShoutType:FireServer("Focused")
+		-- Select only
+		SelectedSkillSlot = 2
+		print("[ShoutController] Selected Skill Slot 2")
+		return
+	end
+
+	if slotToCharge ~= nil then
+		local skillConfig = getEquippedSkillConfig(slotToCharge)
+		if not skillConfig then return end
+
+		local now = os.clock()
+		local lastTime = lastShoutTimes[slotToCharge] or 0
+		if now - lastTime < skillConfig.Cooldown then return end
+
+		isCharging = true
+		chargeStartTime = now
+		CurrentChargingSlot = slotToCharge
+		-- Aura will be created in RenderStepped if charge > 0.4s
+	end
+	
+	if input.KeyCode == Enum.KeyCode.Space then
+		performShout(0, Vector3.new(0, -1, 0), 1) -- Basic slam slot 0
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input: InputObject, _gameProcessed: boolean)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 and isCharging then
+	local isMatch = false
+	if input.UserInputType == Enum.UserInputType.MouseButton1 and CurrentChargingSlot ~= nil then
+		isMatch = true
+	elseif input.KeyCode == Enum.KeyCode.One and CurrentChargingSlot == 1 then
+		isMatch = true
+	elseif input.KeyCode == Enum.KeyCode.Two and CurrentChargingSlot == 2 then
+		isMatch = true
+	end
+
+	if isMatch and isCharging then
 		isCharging = false
+		local slotMatched = CurrentChargingSlot :: number
+		CurrentChargingSlot = nil
+		
 		local elapsed = os.clock() - chargeStartTime
 		removeAura()
 		
@@ -343,7 +433,8 @@ UserInputService.InputEnded:Connect(function(input: InputObject, _gameProcessed:
 			end
 		end
 		
-		performShout(nil, finalMult)
+		performShout(slotMatched, nil, finalMult)
+		print("[ShoutController] Client fired shout. Slot:", slotMatched, "Mult:", finalMult)
 	end
 end)
 
@@ -440,6 +531,24 @@ Remotes.Events.DisplayCustomShout.OnClientEvent:Connect(function(userId: number,
 	textLabel.TextTransparency = 0
 	TweenService:Create(textLabel, TweenInfo.new(Config.CustomShout.DisplayDuration), { TextTransparency = 1 }):Play()
 end)
+
+function ShoutController.GetCooldownData(slotIndex: number)
+	local lastTime = lastShoutTimes[slotIndex] or 0
+	local skillConfig = getEquippedSkillConfig(slotIndex)
+	return lastTime, skillConfig and skillConfig.Cooldown or 0.8
+end
+
+function ShoutController.GetChargingSlot()
+	return CurrentChargingSlot
+end
+
+function ShoutController.GetSelectedSlot()
+	return SelectedSkillSlot
+end
+
+function ShoutController.SetSelectedSlot(slot: number)
+	SelectedSkillSlot = slot
+end
 
 ShoutController.PerformShout = performShout
 

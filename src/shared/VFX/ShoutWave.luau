@@ -163,17 +163,19 @@ end
 -- ============================================================
 -- API chính: Phát sóng âm
 -- ============================================================
-function ShoutWave.Play(origin: CFrame, attackPower: number, shoutConfig: any)
-	local color = getWaveColor(attackPower)
-	local attackDist = shoutConfig and shoutConfig.Range or Config.Shout.KnockbackRange
+function ShoutWave.Play(origin: CFrame, attackPower: number, shoutConfig: any, rarityColor: Color3?, powerMult: number?)
+	local pMult = powerMult or 1.0
+	local color = rarityColor or getWaveColor(attackPower)
+	local baseDist = shoutConfig and shoutConfig.Range or Config.Shout.KnockbackRange
+	local attackDist = baseDist * math.pow(pMult, 0.45)
 	
-	createMouthBlast(origin, color, attackPower)
-	createBeam(origin, color, attackDist, attackPower)
+	createMouthBlast(origin, color, attackPower * pMult)
+	createBeam(origin, color, attackDist, attackPower * pMult)
 	
 	local waveCount = 5
 	for i = 1, waveCount do
 		local delayTime = (i - 1) * 0.05
-		local endRadius = 6 + i * 3
+		local endRadius = (6 + i * 3) * math.sqrt(pMult)
 		local waveDistance = attackDist * (0.5 + (i / waveCount) * 0.5)
 		createFlyingWave(origin, color, delayTime, 0.35, endRadius, waveDistance, attackPower)
 	end

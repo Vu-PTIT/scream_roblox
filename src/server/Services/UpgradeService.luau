@@ -39,9 +39,8 @@ local function onPurchaseUpgrade(player: Player, upgradeId: string)
 
 	-- Xác định level hiện tại
 	local currentLevel: number
-	if cfg.Id == "microphone_1" then currentLevel = data.AttackUpgradeLevel
-	elseif cfg.Id == "speaker_1" then currentLevel = data.SpeakerUpgradeLevel
-	elseif cfg.Id == "headphone_1" then currentLevel = data.DefenseUpgradeLevel
+	if cfg.Id == "damage_1" then currentLevel = data.DamageUpgradeLevel
+	elseif cfg.Id == "health_1" then currentLevel = data.HealthUpgradeLevel
 	elseif cfg.Id == "armor_1" then currentLevel = data.ArmorUpgradeLevel
 	else currentLevel = 0 end
 
@@ -52,20 +51,34 @@ local function onPurchaseUpgrade(player: Player, upgradeId: string)
 	end
 
 	local cost = getCostAtLevel(cfg, currentLevel)
-	if data.Gold < cost then
+	if data.VocalPoints < cost then
 		Remotes.Events.Notification:FireClient(player, string.format(Config.Localization.Notifications.NotEnoughGoldUpgrade, cost))
 		return
 	end
 
-	-- Trừ tiền, tăng level
-	local newGold  = data.Gold - cost
+	-- Trừ điểm, tăng level
+	local newVP    = data.VocalPoints - cost
 	local newLevel = currentLevel + 1
 
-	local updates = { Gold = newGold }
-	if cfg.Id == "microphone_1" then updates.AttackUpgradeLevel = newLevel
-	elseif cfg.Id == "speaker_1" then updates.SpeakerUpgradeLevel = newLevel
-	elseif cfg.Id == "headphone_1" then updates.DefenseUpgradeLevel = newLevel
-	elseif cfg.Id == "armor_1" then updates.ArmorUpgradeLevel = newLevel
+	local updates: any = { VocalPoints = newVP }
+	if cfg.Id == "damage_1" then 
+		updates.DamageUpgradeLevel = newLevel
+	elseif cfg.Id == "health_1" then 
+		updates.HealthUpgradeLevel = newLevel
+		local newMaxHP = Config.DefaultPlayerData.MaxHealth + (newLevel * cfg.StatPerLevel)
+		updates.MaxHealth = newMaxHP
+		
+		-- Cập nhật Humanoid ngay lập tức
+		local char = player.Character
+		if char then
+			local hum = char:FindFirstChildOfClass("Humanoid") :: Humanoid?
+			if hum then
+				hum.MaxHealth = newMaxHP
+				hum.Health = math.min(hum.Health + cfg.StatPerLevel, newMaxHP)
+			end
+		end
+	elseif cfg.Id == "armor_1" then 
+		updates.ArmorUpgradeLevel = newLevel
 	end
 	
 	DataService.UpdateFields(player, updates)

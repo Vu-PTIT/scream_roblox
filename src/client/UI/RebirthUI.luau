@@ -16,7 +16,11 @@ end)
 
 local RebirthUI = {}
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
+
+local function getPlayerGui(): PlayerGui?
+	if not LocalPlayer then return nil end
+	return LocalPlayer:FindFirstChildOfClass("PlayerGui")
+end
 
 local rebirthScreen: ScreenGui? = nil
 local _isOpen = false
@@ -26,21 +30,23 @@ local function buildRebirthUI(): ScreenGui
 	screen.Name            = "RebirthUI"
 	screen.ResetOnSpawn    = false
 	screen.DisplayOrder    = 20
+	screen.IgnoreGuiInset  = true
 	screen.Enabled         = false
 
 	local overlay          = Instance.new("Frame")
 	overlay.Size           = UDim2.new(1, 0, 1, 0)
 	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	overlay.BackgroundTransparency = 0.6
+	overlay.BackgroundTransparency = 0.5
 	overlay.BorderSizePixel = 0
 	overlay.Parent         = screen
 
 	local panel            = Instance.new("Frame")
 	panel.Name             = "Panel"
-	panel.Size             = UDim2.new(0, 440, 0, 330)
-	panel.Position         = UDim2.new(0.5, -220, 0.5, -165)
+	panel.Size             = UDim2.new(0, 480, 0, 380)
+	panel.Position         = UDim2.new(0.5, 0, 0.5, 0)
+	panel.AnchorPoint      = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3 = Config.Theme.Background
-	panel.BackgroundTransparency = Config.Theme.Transparency
+	panel.BackgroundTransparency = Config.Theme.PanelTransparency
 	panel.BorderSizePixel  = 0
 	panel.Parent           = screen
 
@@ -48,36 +54,34 @@ local function buildRebirthUI(): ScreenGui
 	corner.CornerRadius = Config.Theme.CornerRadius
 	corner.Parent = panel
 
-	local panelStroke = Instance.new("UIStroke")
-	panelStroke.Color = Config.Theme.StrokeColor
-	panelStroke.Thickness = Config.Theme.StrokeThickness
-	panelStroke.Transparency = 0.3
-	panelStroke.Parent = panel
-
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(200, 160, 0)
-	stroke.Thickness = 2
+	stroke.Color = Config.Theme.StrokeColor
+	stroke.Thickness = Config.Theme.StrokeThickness
+	stroke.Transparency = 0.3
 	stroke.Parent = panel
+	
+	local grad = Instance.new("UIGradient")
+	grad.Color = ColorSequence.new(Config.Theme.PanelGradient[1], Config.Theme.PanelGradient[2])
+	grad.Rotation = 45
+	grad.Parent = panel
 
-	local starLabel = Instance.new("TextLabel")
-	starLabel.Size  = UDim2.new(1, 0, 0, 60)
-	starLabel.Position = UDim2.new(0, 0, 0, 10)
-	starLabel.BackgroundTransparency = 1
-	starLabel.Text  = "⭐   " .. Config.Localization.Rebirth.Title .. "   ⭐"
-	starLabel.TextColor3 = Config.Theme.TextMain
-	starLabel.Font  = Enum.Font.GothamBlack
-	starLabel.TextSize = 24 -- Reduced from 28 to prevent overlap
-	starLabel.TextWrapped = true
-	starLabel.Parent = panel
-
-	local titleGradient = Instance.new("UIGradient")
-	titleGradient.Color = ColorSequence.new(Config.Theme.RebirthGradient[1], Config.Theme.RebirthGradient[2])
-	titleGradient.Parent = starLabel
+	local title = Instance.new("TextLabel")
+	title.Size  = UDim2.new(1, 0, 0, 64)
+	title.BackgroundTransparency = 1
+	title.Text  = "REBIRTH"
+	title.TextColor3 = Config.Theme.TextMain
+	title.Font  = Enum.Font.GothamBlack
+	title.TextSize = 24
+	title.Parent = panel
+	
+	local titleGrad = Instance.new("UIGradient")
+	titleGrad.Color = ColorSequence.new(Config.Theme.RebirthGradient[1], Config.Theme.RebirthGradient[2])
+	titleGrad.Parent = title
 
 	local descLabel = Instance.new("TextLabel")
 	descLabel.Name  = "DescLabel"
-	descLabel.Size  = UDim2.new(1, -50, 0, 80)
-	descLabel.Position = UDim2.new(0, 25, 0, 75)
+	descLabel.Size  = UDim2.new(1, -60, 0, 100)
+	descLabel.Position = UDim2.new(0, 30, 0, 80)
 	descLabel.BackgroundTransparency = 1
 	descLabel.Text  = Config.Localization.Rebirth.Desc
 	descLabel.TextColor3 = Config.Theme.TextSecondary
@@ -88,55 +92,39 @@ local function buildRebirthUI(): ScreenGui
 
 	local multPreview = Instance.new("TextLabel")
 	multPreview.Name  = "MultPreview"
-	multPreview.Size  = UDim2.new(1, -50, 0, 44)
-	multPreview.Position = UDim2.new(0, 25, 0, 165)
+	multPreview.Size  = UDim2.new(1, -60, 0, 50)
+	multPreview.Position = UDim2.new(0, 30, 0, 190)
 	multPreview.BackgroundColor3 = Config.Theme.SecondaryBackground
-	multPreview.BackgroundTransparency = 0.4
-	multPreview.Text  = string.format(Config.Localization.Rebirth.NewMult, 1.25)
+	multPreview.BackgroundTransparency = 0.3
+	multPreview.Text  = string.format("NEW MULTIPLIER: x%.2f", 1.25)
 	multPreview.TextColor3 = Config.Theme.TextMain
 	multPreview.Font  = Enum.Font.GothamBold
-	multPreview.TextSize = 18
+	multPreview.TextSize = 20
 	multPreview.BorderSizePixel = 0
 	multPreview.Parent = panel
 
-	local prevStroke = Instance.new("UIStroke")
-	prevStroke.Color = Config.Theme.StrokeColor
-	prevStroke.Thickness = 1
-	prevStroke.Transparency = 0.6
-	prevStroke.Parent = multPreview
-
 	local cornerPrev = Instance.new("UICorner")
-	cornerPrev.CornerRadius = UDim.new(0, 10)
+	cornerPrev.CornerRadius = UDim.new(0, 12)
 	cornerPrev.Parent = multPreview
 
 	-- Confirm Button
 	local confirmBtn = Instance.new("TextButton")
-	confirmBtn.Size  = UDim2.new(0, 180, 0, 50)
-	confirmBtn.Position = UDim2.new(0, 25, 1, -75)
+	confirmBtn.Size  = UDim2.new(0, 200, 0, 54)
+	confirmBtn.Position = UDim2.new(0.5, -210, 1, -85)
 	confirmBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	confirmBtn.Text  = Config.Localization.Rebirth.Confirm
-	confirmBtn.TextColor3 = Config.Theme.TextMain
+	confirmBtn.Text  = "CONFIRM"
+	confirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	confirmBtn.Font  = Enum.Font.GothamBold
-	confirmBtn.TextSize = 16
-	confirmBtn.TextScaled = true -- Added to ensure text fits
+	confirmBtn.TextSize = 18
 	confirmBtn.BorderSizePixel = 0
 	confirmBtn.Parent = panel
-
-	local cornerIcon = Instance.new("TextLabel")
-	cornerIcon.Size = UDim2.new(0, 30, 1, 0)
-	cornerIcon.Position = UDim2.new(0, 10, 0, 0)
-	cornerIcon.BackgroundTransparency = 1
-	cornerIcon.Text = "✅"
-	cornerIcon.TextSize = 18
-	cornerIcon.ZIndex = 2
-	cornerIcon.Parent = confirmBtn
 
 	local gCon = Instance.new("UIGradient")
 	gCon.Color = ColorSequence.new(Config.Theme.SuccessGradient[1], Config.Theme.SuccessGradient[2])
 	gCon.Parent = confirmBtn
 
 	local cornerCon = Instance.new("UICorner")
-	cornerCon.CornerRadius = UDim.new(0, 12)
+	cornerCon.CornerRadius = UDim.new(0, 27)
 	cornerCon.Parent = confirmBtn
 
 	confirmBtn.Activated:Connect(function()
@@ -146,18 +134,18 @@ local function buildRebirthUI(): ScreenGui
 
 	-- Cancel Button
 	local cancelBtn = Instance.new("TextButton")
-	cancelBtn.Size  = UDim2.new(0, 180, 0, 50)
-	cancelBtn.Position = UDim2.new(1, -205, 1, -75)
+	cancelBtn.Size  = UDim2.new(0, 200, 0, 54)
+	cancelBtn.Position = UDim2.new(0.5, 10, 1, -85)
 	cancelBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-	cancelBtn.Text  = "❌ " .. Config.Localization.Rebirth.Cancel
-	cancelBtn.TextColor3 = Config.Theme.TextSecondary
+	cancelBtn.Text  = "CANCEL"
+	cancelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	cancelBtn.Font  = Enum.Font.GothamBold
 	cancelBtn.TextSize = 18
 	cancelBtn.BorderSizePixel = 0
 	cancelBtn.Parent = panel
 
 	local cornerCan = Instance.new("UICorner")
-	cornerCan.CornerRadius = UDim.new(0, 12)
+	cornerCan.CornerRadius = UDim.new(0, 27)
 	cornerCan.Parent = cancelBtn
 
 	cancelBtn.Activated:Connect(function() RebirthUI.Close() end)
@@ -181,9 +169,32 @@ local function buildRebirthUI(): ScreenGui
 	return screen
 end
 
-function RebirthUI.Init()
+function RebirthUI.Init(overrideParent: Instance?)
+	local pg = overrideParent or getPlayerGui()
+	if not pg then return end
+	
+	-- [SMART BINDING] Detect existing RebirthUI
+	local existing: ScreenGui? = nil
+	for _, child in ipairs(pg:GetChildren()) do
+		if child:IsA("ScreenGui") then
+			if child.Name == "RebirthUI" or child:FindFirstChild("MultPreview", true) then
+				if not existing then
+					existing = child
+				else
+					child:Destroy()
+				end
+			end
+		end
+	end
+	
+	if existing then
+		rebirthScreen = existing
+		print("ℹ️ [RebirthUI] Using existing ScreenGui for smart binding.")
+		return
+	end
+
 	local screen = buildRebirthUI()
-	screen.Parent = PlayerGui
+	screen.Parent = pg
 	rebirthScreen = screen
 end
 

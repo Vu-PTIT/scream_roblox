@@ -14,12 +14,16 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local EggHatchUI = {}
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local function getPlayerGui(): PlayerGui?
+	if not LocalPlayer then return nil end
+	return LocalPlayer:FindFirstChildOfClass("PlayerGui")
+end
 
 local hatchScreen: ScreenGui? = nil
 local isAnimating = false
 
-local RarityColors: { [string]: Color3 } = {
+local _RarityColors: { [string]: Color3 } = {
 	Common    = Color3.fromRGB(180, 180, 200),
 	Uncommon  = Color3.fromRGB(80, 255, 120),
 	Rare      = Color3.fromRGB(80, 160, 255),
@@ -96,31 +100,45 @@ local function emitConfetti(parent: GuiObject, amount: number)
 	end
 end
 
-local function playHatchAnimation(pets: {Types.PetData})
+local function playHatchAnimation(pets: {Types.PetData}, overrideParent: Instance?)
 	if isAnimating then return end
 	isAnimating = true
 
 	if not hatchScreen then
-		local newScreen = Instance.new("ScreenGui")
-		newScreen.Name = "EggHatchUI"
-		newScreen.DisplayOrder = 100
-		newScreen.ResetOnSpawn = false
-		newScreen.IgnoreGuiInset = true
-		newScreen.Parent = PlayerGui
-		hatchScreen = newScreen
+		local pg = overrideParent or getPlayerGui()
+		if not pg then return end
+		
+		local existing = (pg :: any):FindFirstChild("EggHatchUI")
+		if existing and existing:IsA("ScreenGui") then
+			hatchScreen = existing
+		else
+			local newScreen = Instance.new("ScreenGui")
+			newScreen.Name = "EggHatchUI"
+			newScreen.DisplayOrder = 100
+			newScreen.ResetOnSpawn = false
+			newScreen.IgnoreGuiInset = true
+			newScreen.Parent = pg
+			hatchScreen = newScreen
+		end
 	end
 	
 	local screen = hatchScreen :: ScreenGui
 	screen.Enabled = true
 
 	local overlay = Instance.new("Frame")
+	overlay.Name = "Overlay"
 	overlay.Size = UDim2.new(1, 0, 1, 0)
-	overlay.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+	overlay.BackgroundColor3 = Config.Theme.Background
 	overlay.BackgroundTransparency = 1
 	overlay.BorderSizePixel = 0
 	overlay.Parent = screen
+	
+	local grad = Instance.new("UIGradient")
+	grad.Color = ColorSequence.new(Config.Theme.PanelGradient[1], Config.Theme.PanelGradient[2])
+	grad.Rotation = 45
+	grad.Parent = overlay
 
-	TweenService:Create(overlay, TweenInfo.new(0.5), { BackgroundTransparency = 0.1 }):Play()
+	TweenService:Create(overlay, TweenInfo.new(0.5), { BackgroundTransparency = 0.2 }):Play()
 
 	local vp = Instance.new("ViewportFrame")
 	vp.Size = UDim2.new(1, 0, 1, 0)
@@ -180,11 +198,16 @@ local function playHatchAnimation(pets: {Types.PetData})
 		playSFX(Config.Audio.EggFlashSFX)
 	end
 	
-	local flashTween = TweenService:Create(overlay, TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, 0, true), { 
-		BackgroundColor3 = Color3.fromRGB(255, 255, 255), 
-		BackgroundTransparency = 0 
-	})
-	flashTween:Play()
+	local flashLayer = Instance.new("Frame")
+	flashLayer.Size = UDim2.new(1, 0, 1, 0)
+	flashLayer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	flashLayer.BackgroundTransparency = 0
+	flashLayer.BorderSizePixel = 0
+	flashLayer.ZIndex = 10
+	flashLayer.Parent = screen
+	
+	TweenService:Create(flashLayer, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
+	task.delay(0.3, function() flashLayer:Destroy() end)
 
 	local hasEpicOrLeg = false
 	for _, pet in ipairs(pets) do
@@ -208,7 +231,7 @@ local function playHatchAnimation(pets: {Types.PetData})
 	local spunModels = {}
 
 	for i, pet in ipairs(pets) do
-		local pColor = RarityColors[pet.Rarity] or Color3.fromRGB(200, 200, 200)
+		local pColor = Config.Theme.RarityColors[pet.Rarity] or Color3.fromRGB(200, 200, 200)
 		local pModel = getModel("Pets", pet.PetType, pColor)
 		local petInstance = pModel :: Instance
 		petInstance.Parent = vp
@@ -221,30 +244,34 @@ local function playHatchAnimation(pets: {Types.PetData})
 		table.insert(spunModels, {model = pModel, pos = tPos})
 
 		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.new(0, 200, 0, 40)
+		lbl.Size = UDim2.new(0, 240, 0, 60)
 		
 		local pctX = 0.5
 		if #pets > 1 then
 			pctX = 0.1 + (i-1) * (0.8 / (#pets - 1))
 		end
-		lbl.Position = UDim2.new(pctX, -100, 0.5, 90)
+		lbl.Position = UDim2.new(pctX, -120, 0.5, 90)
 		lbl.BackgroundTransparency = 1
-		lbl.Text = pet.PetType .. "\n(" .. pet.Rarity .. ")"
+		lbl.Text = pet.PetType .. "\n" .. string.upper(pet.Rarity)
 		lbl.TextColor3 = pColor
-		lbl.TextStrokeColor3 = Color3.fromRGB(20, 20, 30)
-		lbl.TextStrokeTransparency = 0
 		lbl.Font = Enum.Font.GothamBlack
-		lbl.TextSize = 22
+		lbl.TextSize = 24
 		lbl.Parent = overlay
 		
-		lbl.Position = UDim2.new(pctX, -100, 0.5, 120)
+		local lStroke = Instance.new("UIStroke")
+		lStroke.Color = Color3.new(0,0,0)
+		lStroke.Thickness = 2
+		lStroke.Parent = lbl
+		
+		lbl.Position = UDim2.new(pctX, -120, 0.5, 140)
 		lbl.TextTransparency = 1
-		lbl.TextStrokeTransparency = 1
-		TweenService:Create(lbl, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Position = UDim2.new(pctX, -100, 0.5, 90),
-			TextTransparency = 0,
-			TextStrokeTransparency = 0
+		lStroke.Transparency = 1
+		
+		TweenService:Create(lbl, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Position = UDim2.new(pctX, -120, 0.5, 100),
+			TextTransparency = 0
 		}):Play()
+		TweenService:Create(lStroke, TweenInfo.new(0.5), { Transparency = 0.4 }):Play()
 	end
 
 	local spinConn
@@ -269,10 +296,48 @@ local function playHatchAnimation(pets: {Types.PetData})
 	isAnimating = false
 end
 
-function EggHatchUI.Init()
+function EggHatchUI.Init(overrideParent: Instance?)
 	Remotes.Events.EggOpenResult.OnClientEvent:Connect(function(pets)
-		playHatchAnimation(pets)
+		playHatchAnimation(pets, overrideParent)
 	end)
+	
+	-- [SMART BINDING] Detect existing EggHatchUI
+	local pg = overrideParent or getPlayerGui()
+	if not pg then return end
+	
+	local existing: ScreenGui? = nil
+	for _, child in ipairs(pg:GetChildren()) do
+		if child:IsA("ScreenGui") then
+			if child.Name == "EggHatchUI" or child:FindFirstChild("Overlay", true) then
+				if not existing then
+					existing = child
+				else
+					child:Destroy()
+				end
+			end
+		end
+	end
+	
+	if existing then
+		hatchScreen = existing
+		print("ℹ️ [EggHatchUI] Using existing ScreenGui for smart binding.")
+	else
+		local newScreen = Instance.new("ScreenGui")
+		newScreen.Name = "EggHatchUI"
+		newScreen.DisplayOrder = 100
+		newScreen.ResetOnSpawn = false
+		newScreen.IgnoreGuiInset = true
+		newScreen.Enabled = false
+		newScreen.Parent = pg
+		hatchScreen = newScreen
+		
+		local overlay = Instance.new("Frame")
+		overlay.Name = "Overlay"
+		overlay.Size = UDim2.new(1, 0, 1, 0)
+		overlay.BackgroundTransparency = 1
+		overlay.Parent = newScreen
+	end
+	
 	print("[EggHatchUI] Initialized")
 end
 
