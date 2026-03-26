@@ -31,6 +31,7 @@ local function buildUI(): ScreenGui
 	screen.ResetOnSpawn    = false
 	screen.DisplayOrder    = 20
 	screen.IgnoreGuiInset  = true
+	screen.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
 	screen.Enabled         = false
 
 	local overlay          = Instance.new("Frame")
@@ -47,7 +48,9 @@ local function buildUI(): ScreenGui
 	panel.AnchorPoint      = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3 = Config.Theme.Background
 	panel.BackgroundTransparency = Config.Theme.PanelTransparency
-	panel.BorderSizePixel  = 0
+	panel.BorderSizePixel  = 4
+	panel.BorderColor3     = Color3.fromRGB(0, 200, 255) -- SKY BLUE BORDER
+	panel.ZIndex           = 1
 	panel.Parent           = screen
 
 	local corner = Instance.new("UICorner")
@@ -265,35 +268,27 @@ end
 
 function QuestUI.Init(overrideParent: Instance?)
 	local pg = overrideParent or getPlayerGui()
-	if not pg then return end
-	
-	-- [SMART BINDING] Detect existing QuestUI
-	local existing: ScreenGui? = nil
-	for _, child in ipairs(pg:GetChildren()) do
-		if child:IsA("ScreenGui") then
-			if child.Name == "QuestUI" or child:FindFirstChild("QuestList", true) then
-				if not existing then
-					existing = child
-				else
-					child:Destroy()
-				end
-			end
-		end
+	if not pg then 
+		warn("[QuestUI] Init failed: PlayerGui not found") 
+		return 
 	end
 	
-	if existing then
-		questScreen = existing
-		print("ℹ️ [QuestUI] Using existing ScreenGui for smart binding.")
-	else
-		local screen = buildUI()
-		screen.Parent = pg
-		questScreen = screen
+	local existing = (pg :: any):FindFirstChild("QuestUI")
+	if existing then 
+		print("ℹ️ [QuestUI] Destroying existing UI to rebuild.")
+		existing:Destroy() 
 	end
+
+	local newScreen = buildUI()
+	questScreen = newScreen
+	newScreen.Parent = pg
+	
+	print("[QuestUI] Init complete. Parent:", (newScreen.Parent :: any).Name)
 	
 	task.defer(function()
 		task.wait(0.5)
 		if DataController then
-			DataController.OnDataChanged(function(key: string, value: any)
+			DataController.OnDataChanged(function(key: string, _)
 				if key == "Quests" or key == "ClaimedQuests" or key == "__all__" then
 					if isOpen then updateUIState() end
 				end
@@ -303,10 +298,20 @@ function QuestUI.Init(overrideParent: Instance?)
 end
 
 function QuestUI.Open()
+	local pg = getPlayerGui()
+	if not pg then return end
+
+	local isValid = questScreen and questScreen.Parent == pg and questScreen:IsDescendantOf(pg)
+	if not isValid then
+		print("⚠️ [QuestUI] questScreen invalid or detached. Re-initializing...")
+		QuestUI.Init()
+	end
+
 	if questScreen then 
 		questScreen.Enabled = true
 		isOpen = true 
 		updateUIState()
+		print("[QuestUI] Opened successfully.")
 	end
 end
 

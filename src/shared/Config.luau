@@ -44,14 +44,13 @@ Config.DefaultPlayerData = defaultData
 Config.Shout = {
 	Cooldown          = 0.8,   -- giây giữa các lần hét
 	BaseDamage        = 8,     -- (Đã giảm) hệ số nhân sát thương chung (Damage = ATK * Base / DEF)
-	BaseForce         = 15,    -- (Đã giảm mạnh) lực đẩy cơ bản 
-	KnockbackScaling  = 10,    -- (Đã giảm mạnh) hệ số nhân (ATK / DEF) cho lực văng
+	BaseForce         = 8,     -- (Cân bằng với công thức mới)
+	KnockbackScaling  = 6,     -- (Reduced from 15) Cân bằng với công thức mới
 	KnockbackRange    = 20,    -- studs - bán kính cone sóng âm
-	ConeAngle         = 55,    -- độ - góc nửa-cone khi lan sóng
-	VerticalBias      = 0.5,   -- tăng một chút để nảy lên rõ nét thay vì trượt ngang
-	MaxForce          = 45,    -- (Đã giảm thêm) giới hạn vận tốc tối đa để tránh văng bay màu khỏi màn hình
-	VocalPointsPerHit = 5,
-	VocalPointsPerUse = 2.0,
+	VerticalBias      = 0.4,   -- Tăng một chút để nảy lên rõ nét thay vì trượt ngang
+	MaxForce          = 150,   -- (Reduced from 300) Giới hạn vận tốc để không văng khỏi map
+	VocalPointsPerHit = 10,
+	VocalPointsPerUse = 4.0,
 
 	-- Hệ thống Gồng lực (Power Charge)
 	Charge = {
@@ -173,10 +172,10 @@ local upgradesData: { Types.UpgradeConfig } = {
 		Id          = "damage_1",
 		DisplayName = "Sonic Power",
 		Category    = "Attack",
-		BaseCost    = 150,
-		CostScaling = 1.5,
+		BaseCost    = 50,
+		CostScaling = 1.3,
 		StatPerLevel = 5,
-		MaxLevel    = 100,
+		MaxLevel    = 30,
 		Icon        = "rbxassetid://5905055047",
 	},
 	{
@@ -184,19 +183,19 @@ local upgradesData: { Types.UpgradeConfig } = {
 		DisplayName = "Vitality Boost",
 		Category    = "Defense",
 		BaseCost    = 75,
-		CostScaling = 1.5,
+		CostScaling = 1.3,
 		StatPerLevel = 20,
-		MaxLevel    = 100,
+		MaxLevel    = 30,
 		Icon        = "rbxassetid://515329329",
 	},
 	{
 		Id          = "armor_1",
 		DisplayName = "Knockback Resistance",
 		Category    = "Defense",
-		BaseCost    = 600,
-		CostScaling = 1.6,
+		BaseCost    = 80,
+		CostScaling = 1.3,
 		StatPerLevel = 10,
-		MaxLevel    = 100,
+		MaxLevel    = 30,
 		Icon        = "rbxassetid://2703816766",
 	},
 }
@@ -248,7 +247,7 @@ local gachaWeights: { [string]: number } = {
 }
 Config.PetGachaWeights = gachaWeights
 
-Config.EggCostGold = 100  -- chi phí mở 1 trứng
+Config.EggCostGold = 500  -- chi phí mở 1 trứng
 
 -- ============================================================
 -- SKILLS
@@ -278,11 +277,12 @@ Config.SkillGachaWeights = {
 	Legendary = 1,
 }
 
-Config.SkillScrollCost = 250 -- chi phí mở 1 cuộn skill
+Config.SkillScrollCost = 1000 -- chi phí mở 1 cuộn skill
 
 -- ============================================================
 -- MONSTERS
 -- ============================================================
+-- KnockbackResistance: 0 (bay xa) -> 1 (không bị đẩy)
 local monstersData: { Types.MonsterConfig } = {
 	-- Starter Zone
 	{
@@ -291,6 +291,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 80,
 		Attack         = 5,
 		Defense        = 2,
+		KnockbackResistance = 0.1,
 		MovementSpeed  = 13,
 		GoldDrop       = 10,
 		EggDropChance  = 0.03,
@@ -303,6 +304,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 400,
 		Attack         = 30,
 		Defense        = 20,
+		KnockbackResistance = 0.5,
 		MovementSpeed  = 11,
 		GoldDrop       = 50,
 		EggDropChance  = 0.15,
@@ -314,6 +316,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 150,
 		Attack         = 15,
 		Defense        = 8,
+		KnockbackResistance = 0.2,
 		MovementSpeed  = 15,
 		GoldDrop       = 30,
 		EggDropChance  = 0.08,
@@ -326,6 +329,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 800,
 		Attack         = 45,
 		Defense        = 30,
+		KnockbackResistance = 0.3,
 		MovementSpeed  = 15,
 		GoldDrop       = 120,
 		EggDropChance  = 0.20,
@@ -337,6 +341,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 1500,
 		Attack         = 60,
 		Defense        = 45,
+		KnockbackResistance = 0.6,
 		MovementSpeed  = 11,
 		GoldDrop       = 200,
 		EggDropChance  = 0.30,
@@ -349,6 +354,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 3000,
 		Attack         = 90,
 		Defense        = 70,
+		KnockbackResistance = 0.4,
 		MovementSpeed  = 14,
 		GoldDrop       = 400,
 		EggDropChance  = 0.35,
@@ -360,6 +366,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 6000,
 		Attack         = 120,
 		Defense        = 90,
+		KnockbackResistance = 0.7,
 		MovementSpeed  = 11,
 		GoldDrop       = 700,
 		EggDropChance  = 0.45,
@@ -372,6 +379,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 15000,
 		Attack         = 200,
 		Defense        = 150,
+		KnockbackResistance = 0.5,
 		MovementSpeed  = 15,
 		GoldDrop       = 1500,
 		EggDropChance  = 0.60,
@@ -383,6 +391,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 30000,
 		Attack         = 280,
 		Defense        = 200,
+		KnockbackResistance = 0.8,
 		MovementSpeed  = 13,
 		GoldDrop       = 2500,
 		EggDropChance  = 0.70,
@@ -395,6 +404,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 80000,
 		Attack         = 450,
 		Defense        = 300,
+		KnockbackResistance = 0.9,
 		MovementSpeed  = 14,
 		GoldDrop       = 5000,
 		EggDropChance  = 0.85,
@@ -407,6 +417,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 10000,
 		Attack         = 150,
 		Defense        = 100,
+		KnockbackResistance = 0.85,
 		MovementSpeed  = 12,
 		GoldDrop       = 1000,
 		EggDropChance  = 0.80,
@@ -419,6 +430,7 @@ local monstersData: { Types.MonsterConfig } = {
 		MaxHP          = 50000,
 		Attack         = 300,
 		Defense        = 200,
+		KnockbackResistance = 0.95,
 		MovementSpeed  = 11,
 		GoldDrop       = 3000,
 		EggDropChance  = 0.90,
@@ -426,6 +438,7 @@ local monstersData: { Types.MonsterConfig } = {
 		IsBoss         = true,
 	},
 }
+
 Config.Monsters = monstersData
 
 Config.MonsterRespawnTime = 8  -- giây
@@ -570,15 +583,15 @@ Config.Localization = {
 -- ============================================================
 Config.Theme = {
 	-- Modern Glassmorphism & HSL Tokens
-	Background = Color3.fromRGB(21, 22, 32),         -- #151620 (Darker)
-	SecondaryBackground = Color3.fromRGB(28, 30, 44), -- #1C1E2C
-	PanelTransparency = 0.1,
-	CornerRadius = UDim.new(0, 12),
-	StrokeThickness = 1.5,
-	StrokeColor = Color3.fromRGB(60, 65, 90),
+	Background = Color3.fromRGB(28, 30, 42),         -- Slightly lighter
+	SecondaryBackground = Color3.fromRGB(35, 38, 55),
+	PanelTransparency = 0.15,
+	CornerRadius = UDim.new(0, 14),
+	StrokeThickness = 2,
+	StrokeColor = Color3.fromRGB(70, 75, 110),
 	
 	-- Universal Gradients
-	PanelGradient = { Color3.fromRGB(30, 32, 45), Color3.fromRGB(20, 22, 35) },
+	PanelGradient = { Color3.fromRGB(40, 42, 60), Color3.fromRGB(25, 27, 40) },
 	PrimaryGradient = { Color3.fromRGB(100, 180, 255), Color3.fromRGB(60, 120, 255) },
 	SecondaryGradient = { Color3.fromRGB(255, 180, 60), Color3.fromRGB(200, 130, 40) },
 	SuccessGradient = { Color3.fromRGB(80, 220, 160), Color3.fromRGB(40, 180, 120) },

@@ -16,18 +16,14 @@ local React          = require(game.ReplicatedStorage.Packages.React)
 local ReactRoblox    = require(game.ReplicatedStorage.Packages.ReactRoblox)
 
 -- Lazy-load UI modules
-local HUD            = require(script.Parent.Parent.UI.HUD)
+-- local HUD            = require(script.Parent.Parent.UI.HUD) -- Unused legacy HUD
 local HUDApp         = require(script.Parent.Parent.UI.HUDApp)
-local Shop           = require(script.Parent.Parent.UI.Shop)
-local PetUI          = require(script.Parent.Parent.UI.PetUI)
-local RebirthUI      = require(script.Parent.Parent.UI.RebirthUI)
+local ShopApp        = require(script.Parent.Parent.UI.ShopApp)
 local CustomShoutUI  = require(script.Parent.Parent.UI.CustomShoutUI)
 local CodeUI         = require(script.Parent.Parent.UI.CodeUI)
 local RewardUI       = require(script.Parent.Parent.UI.RewardUI)
-local QuestUI        = require(script.Parent.Parent.UI.QuestUI)
 local EggHatchUI     = require(script.Parent.Parent.UI.EggHatchUI)
 local SkillBar       = require(script.Parent.Parent.UI.SkillBar)
-local SkillUI        = require(script.Parent.Parent.UI.SkillUI)
 local BagUI          = require(script.Parent.Parent.UI.BagUI)
 
 local UIController = {}
@@ -39,14 +35,10 @@ local PlayerGui    = LocalPlayer:WaitForChild("PlayerGui")
 -- ============================================================
 
 local function CloseAllOpenWindows()
-	if Shop.Close then Shop.Close() end
-	if PetUI.Close then PetUI.Close() end
-	if RebirthUI.Close then RebirthUI.Close() end
+	ShopApp.OpenWindow(nil)
 	if CustomShoutUI.Close then CustomShoutUI.Close() end
 	if CodeUI.Close then CodeUI.Close() end
 	if RewardUI.Close then RewardUI.Close() end
-	if QuestUI.Close then QuestUI.Close() end
-	if SkillUI.Close then SkillUI.Close() end
 	if BagUI.Close then BagUI.Close() end
 end
 
@@ -126,10 +118,10 @@ local function _buildNavBar()
 	container.Name = "ButtonContainer"
 	
 	local buttons = {
-		{ id = "Shop",    icon = "🛒", baseColor = Config.Theme.BtnShopBase,    shadowColor = Config.Theme.BtnShopShadow,    action = function() CloseAllOpenWindows(); Shop.Open() end },
-		{ id = "Pets",    icon = "🐾", baseColor = Config.Theme.BtnPetsBase,    shadowColor = Config.Theme.BtnPetsShadow,    action = function() CloseAllOpenWindows(); PetUI.Open() end },
-		{ id = "Skills",  icon = "🎴", baseColor = Config.Theme.BtnCodeBase,    shadowColor = Config.Theme.BtnCodeShadow,    action = function() CloseAllOpenWindows(); SkillUI.Open() end },
-		{ id = "Quest",   icon = "📜", baseColor = Config.Theme.BtnQuestBase,   shadowColor = Config.Theme.BtnQuestShadow,   action = function() CloseAllOpenWindows(); QuestUI.Open() end },
+		{ id = "Shop",    icon = "🛒", baseColor = Config.Theme.BtnShopBase,    shadowColor = Config.Theme.BtnShopShadow,    action = function() CloseAllOpenWindows(); ShopApp.OpenWindow("Shop") end },
+		{ id = "Pets",    icon = "🐾", baseColor = Config.Theme.BtnPetsBase,    shadowColor = Config.Theme.BtnPetsShadow,    action = function() CloseAllOpenWindows(); ShopApp.OpenWindow("Pet") end },
+		{ id = "Skills",  icon = "🎴", baseColor = Config.Theme.BtnCodeBase,    shadowColor = Config.Theme.BtnCodeShadow,    action = function() CloseAllOpenWindows(); ShopApp.OpenWindow("Skill") end },
+		{ id = "Quest",   icon = "📜", baseColor = Config.Theme.BtnQuestBase,   shadowColor = Config.Theme.BtnQuestShadow,   action = function() CloseAllOpenWindows(); ShopApp.OpenWindow("Quest") end },
 		{ id = "Reward",  icon = "⏱️", baseColor = Config.Theme.BtnRewardBase,  shadowColor = Config.Theme.BtnRewardShadow,  action = function() CloseAllOpenWindows(); RewardUI.Open() end },
 		{ id = "Shout",   icon = "✏️", baseColor = Config.Theme.BtnShoutBase,   shadowColor = Config.Theme.BtnShoutShadow,   action = function() CloseAllOpenWindows(); CustomShoutUI.Open() end },
 	}
@@ -250,35 +242,124 @@ end
 -- ============================================================
 -- PROXIMITY PROMPTS
 -- ============================================================
+-- ============================================================
+-- STATION TRIGGERS (PROXIMITY & CLICK)
+-- ============================================================
+local function handleStationTrigger(stationId: string)
+	print("[UIController] handleStationTrigger:", stationId)
+	
+	-- Play click sound if available
+	pcall(function()
+		local sound = Instance.new("Sound")
+		sound.SoundId = "rbxassetid://6895079853" -- Standard click
+		sound.Volume = 0.5
+		sound.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+		sound:Play()
+		game:GetService("Debris"):AddItem(sound, 2)
+	end)
+
+	CloseAllOpenWindows()
+	print("[UIController] Trigggering window for stationId:", stationId)
+	
+	if stationId == "Shop" then
+		ShopApp.OpenWindow("Shop")
+	elseif stationId == "Pet" then
+		ShopApp.OpenWindow("Pet")
+	elseif stationId == "Rebirth" then
+		ShopApp.OpenWindow("Rebirth")
+	elseif stationId == "Skill" then
+		ShopApp.OpenWindow("Skill")
+	elseif stationId == "Quest" then
+		ShopApp.OpenWindow("Quest")
+	elseif stationId == "Reward" then
+		RewardUI.Open()
+	elseif stationId == "Shout" then
+		CustomShoutUI.Open()
+	elseif stationId == "Inventory" then
+		BagUI.Open()
+	else
+		print("[UIController] Unknown stationId:", stationId)
+	end
+end
+
 local function bindProximityPrompts()
 	ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
+		print("[UIController] PromptTriggered:", prompt.Name, "by", player.Name)
 		if player == LocalPlayer then
-			if prompt.Name == "Prompt_Shop" then
-				CloseAllOpenWindows()
-				Shop.Open()
-			elseif prompt.Name == "Prompt_Pet" then
-				CloseAllOpenWindows()
-				PetUI.Open()
-			elseif prompt.Name == "Prompt_Rebirth" then
-				CloseAllOpenWindows()
-				RebirthUI.Open()
-			elseif prompt.Name == "Prompt_Skill" then
-				CloseAllOpenWindows()
-				SkillUI.Open()
-			elseif prompt.Name == "Prompt_Quest" then
-				CloseAllOpenWindows()
-				QuestUI.Open()
-			elseif prompt.Name == "Prompt_Reward" then
-				CloseAllOpenWindows()
-				RewardUI.Open()
-			elseif prompt.Name == "Prompt_Shout" then
-				CloseAllOpenWindows()
-				CustomShoutUI.Open()
-			elseif prompt.Name == "Prompt_Inventory" then
-				CloseAllOpenWindows()
-				BagUI.Open()
+			local stationId = prompt.Name:match("Prompt_(.+)")
+			
+			-- Fallback detection based on parent name or id
+			if not stationId then
+				local pName = prompt.Parent and prompt.Parent.Name or ""
+				if pName:find("Skill") then stationId = "Skill"
+				elseif pName:find("Pet") then stationId = "Pet"
+				elseif pName:find("Upgrade") or pName:find("Shop") then stationId = "Shop"
+				elseif pName:find("Rebirth") then stationId = "Rebirth"
+				elseif pName:find("Quest") then stationId = "Quest"
+				elseif pName:find("Reward") then stationId = "Reward"
+				elseif pName:find("Speech") or pName:find("Shout") then stationId = "Shout"
+				elseif pName:find("Inventory") or pName:find("Bag") then stationId = "Inventory"
+				end
+			end
+
+			print("[UIController] Final stationId:", stationId)
+			if stationId then
+				handleStationTrigger(stationId)
+			else
+				warn("[UIController] No stationId found for prompt:", prompt.Name, "Parent:", prompt.Parent and prompt.Parent.Name)
 			end
 		end
+	end)
+end
+
+local function bindClickDetectors()
+	task.spawn(function()
+		local map = workspace:WaitForChild("Map", 10)
+		if not map then return end
+		local stations = map:WaitForChild("Stations", 10)
+		if not stations then return end
+
+		local function setupClick(child: ClickDetector)
+			child.MouseClick:Connect(function()
+				local stationId = child.Name:match("Click_(.+)")
+				if not stationId then
+					local pName = child.Parent and child.Parent.Name or ""
+					if pName:find("Skill") then stationId = "Skill"
+					elseif pName:find("Pet") then stationId = "Pet"
+					elseif pName:find("Upgrade") or pName:find("Shop") then stationId = "Shop"
+					elseif pName:find("Rebirth") then stationId = "Rebirth"
+					elseif pName:find("Quest") then stationId = "Quest"
+					elseif pName:find("Reward") then stationId = "Reward"
+					elseif pName:find("Speech") or pName:find("Shout") then stationId = "Shout"
+					elseif pName:find("Inventory") or pName:find("Bag") then stationId = "Inventory"
+					end
+				end
+				if stationId then
+					handleStationTrigger(stationId)
+				end
+			end)
+		end
+
+		for _, station in ipairs(stations:GetChildren()) do
+			if station:IsA("BasePart") then
+				for _, child in ipairs(station:GetChildren()) do
+					if child:IsA("ClickDetector") then
+						setupClick(child)
+					end
+				end
+			end
+		end
+		
+		stations.ChildAdded:Connect(function(station)
+			if station:IsA("BasePart") then
+				task.wait(0.5) -- wait for children
+				for _, child in ipairs(station:GetChildren()) do
+					if child:IsA("ClickDetector") then
+						setupClick(child)
+					end
+				end
+			end
+		end)
 	end)
 end
 
@@ -290,28 +371,27 @@ function UIController.Init()
 	-- HUD.Init() -- Legacy HUD disabled in favor of React HUDApp
 	
 	-- Mount React HUD
-	local hudRoot = ReactRoblox.createRoot(PlayerGui)
-	hudRoot:render(React.createElement(HUDApp))
+	local root = ReactRoblox.createRoot(PlayerGui)
+	root:render(React.createElement(React.Fragment, nil,
+		React.createElement(HUDApp),
+		React.createElement(ShopApp.Component)
+	))
 	
-	-- Disable default Roblox Health UI (moved from legacy HUD)
+	-- Disable default Roblox Health UI
 	pcall(function() game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Health, false) end)
 
-	Shop.Init()
-	PetUI.Init()
-	RebirthUI.Init()
 	CustomShoutUI.Init()
 	CodeUI.Init()
 	RewardUI.Init()
-	QuestUI.Init()
 	EggHatchUI.Init()
 	SkillBar.Init()
-	SkillUI.Init()
 	BagUI.Init()
 
 	-- Nav bar + shortcuts + map
-	-- _buildNavBar()
+	_buildNavBar()
 	_bindKeyShortcuts()
 	bindProximityPrompts()
+	bindClickDetectors()
 
 	-- Notification remote
 	Remotes.Events.Notification.OnClientEvent:Connect(function(...)

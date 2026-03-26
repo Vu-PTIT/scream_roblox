@@ -485,16 +485,25 @@ local function createStations()
 		end
 
 		-- Tạo ProximityPrompt nếu chưa có
-		if not part:FindFirstChild("Prompt_" .. data.id) then
-			local prompt = Instance.new("ProximityPrompt")
-			prompt.Name = "Prompt_" .. data.id
-			prompt.ActionText = "Open"
-			prompt.ObjectText = data.name
-			prompt.KeyboardKeyCode = Enum.KeyCode.E
-			prompt.RequiresLineOfSight = false
-			prompt.MaxActivationDistance = 12
-			prompt.Parent = part
-		end
+		-- Tạo ProximityPrompt
+		local prompt = (part:FindFirstChild("Prompt_" .. data.id) or Instance.new("ProximityPrompt")) :: ProximityPrompt
+		prompt.Name = "Prompt_" .. data.id
+		prompt.Parent = part
+		
+		prompt.ActionText = "Open"
+		prompt.ObjectText = data.name
+		prompt.KeyboardKeyCode = Enum.KeyCode.E
+		prompt.RequiresLineOfSight = false
+		prompt.MaxActivationDistance = 15 -- Increased helper
+		prompt.HoldDuration = 0
+		prompt.Enabled = true
+
+		-- Tạo ClickDetector nếu chưa có
+		-- Tạo ClickDetector
+		local click = (part:FindFirstChild("Click_" .. data.id) or Instance.new("ClickDetector")) :: ClickDetector
+		click.Name = "Click_" .. data.id
+		click.Parent = part
+		click.MaxActivationDistance = 20
 	end
 end
 

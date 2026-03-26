@@ -23,7 +23,8 @@ local ShoutService = {}
 local ShoutCooldowns: { [string]: number } = {}
 
 local function getTotalAttack(data: Types.PlayerData): number
-	local upgradeBonus = data.DamageUpgradeLevel * Config.Upgrades[1].StatPerLevel
+	local upgradeCfg = Config.GetUpgrade("damage_1")
+	local upgradeBonus = data.DamageUpgradeLevel * (upgradeCfg and upgradeCfg.StatPerLevel or 5)
 	
 	local petMult = 1
 	for _, petData in ipairs(data.Pets) do
@@ -36,13 +37,20 @@ local function getTotalAttack(data: Types.PlayerData): number
 end
 
 local function getTotalDefense(data: Types.PlayerData): number
-	local bonus = data.ArmorUpgradeLevel * Config.Upgrades[3].StatPerLevel
+	local upgradeCfg = Config.GetUpgrade("armor_1")
+	local bonus = data.ArmorUpgradeLevel * (upgradeCfg and upgradeCfg.StatPerLevel or 10)
 	return data.Defense + bonus
 end
 
-local function calculateKnockback(attackerAtk : number, targetDef : number, direction : Vector3): Vector3
-	local ratio = attackerAtk / math.max(1, targetDef)
-	local rawForce = Config.Shout.BaseForce + (ratio * Config.Shout.KnockbackScaling)
+local function calculateKnockback(attackerAtk : number, targetDef : number, direction : Vector3, resistance: number?): Vector3
+	local res = resistance or 0
+	local flatComponent  = attackerAtk * 0.2           -- Reduced from 0.4
+	
+	-- New formula: use power function (0.7) to dampen extreme ratios
+	local baseRatio = (attackerAtk / math.max(1, targetDef))
+	local ratioComponent = math.pow(baseRatio, 0.7) * Config.Shout.KnockbackScaling
+	
+	local rawForce = (Config.Shout.BaseForce + flatComponent + ratioComponent) * (1 - res)
 	local capped   = math.min(rawForce, Config.Shout.MaxForce)
 
 	local horizontalDir = Vector3.new(direction.X, 0, direction.Z).Unit
@@ -123,12 +131,18 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 		if isMonster and not target.IsPlayer then continue end 
 
 		local totalDef = 10 
+		local knockbackRes = 0
+
 		if target.IsPlayer and target.Player then
 			local targetData = DataService.GetData(target.Player) :: Types.PlayerData?
 			if targetData then totalDef = getTotalDefense(targetData) end
+		else
+			-- Lấy chỉ số thực tế của quái từ Attribute
+			totalDef = (targetCharAct:GetAttribute("Defense") :: number) or 10
+			knockbackRes = (targetCharAct:GetAttribute("KnockbackResistance") :: number) or 0
 		end
 
-		local force = calculateKnockback(totalAtk * pMult, totalDef, direction)
+		local force = calculateKnockback(totalAtk * pMult, totalDef, direction, knockbackRes)
 		local ratio = (totalAtk * pMult) / math.max(1, totalDef)
 		local damageTaken = ratio * Config.Shout.BaseDamage
 
@@ -150,7 +164,9 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 			if hum.Health > 0 then
 				hum.AutoRotate = false
 				hum:ChangeState(Enum.HumanoidStateType.Physics)
-				targetHRP.AssemblyLinearVelocity = force + Vector3.new(0, 20, 0)
+				
+				-- Giảm lực đẩy Y thêm vào (trước là 20) để quái không bay quá cao
+				targetHRP.AssemblyLinearVelocity = force + Vector3.new(0, 10, 0)
 				
 				task.delay(0.6, function()
 					if hum and hum.Parent and hum.Health > 0 then

@@ -151,33 +151,36 @@ local function createPetCard(parent: Instance, pet: Types.PetData, index: number
 end
 
 local function buildPetUI(): ScreenGui
+	print("[PetUI] Building UI...")
 	local screen            = Instance.new("ScreenGui")
 	screen.Name             = "PetUI"
 	screen.ResetOnSpawn     = false
-	screen.DisplayOrder     = 20
+	screen.DisplayOrder     = 999 -- Extremely high
 	screen.IgnoreGuiInset   = true
+	screen.ZIndexBehavior   = Enum.ZIndexBehavior.Sibling
 	screen.Enabled          = false
-
-	local overlay           = Instance.new("Frame")
-	overlay.Size            = UDim2.new(1, 0, 1, 0)
-	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	overlay.BackgroundTransparency = 0.5
-	overlay.BorderSizePixel = 0
-	overlay.Parent          = screen
 
 	local panel             = Instance.new("Frame")
 	panel.Name              = "Panel"
-	panel.Size              = UDim2.new(0, 620, 0, 600)
+	panel.Size              = UDim2.new(0, 600, 0, 500)
 	panel.Position          = UDim2.new(0.5, 0, 0.5, 0)
 	panel.AnchorPoint       = Vector2.new(0.5, 0.5)
-	panel.BackgroundColor3  = Config.Theme.Background
-	panel.BackgroundTransparency = Config.Theme.PanelTransparency
-	panel.BorderSizePixel   = 0
+	panel.BackgroundColor3  = Color3.fromRGB(30, 30, 40)
+	panel.BackgroundTransparency = 0.2 -- Slightly see-through
+	panel.ZIndex            = 1
+	panel.BorderSizePixel   = 4
+	panel.BorderColor3      = Color3.fromRGB(255, 0, 0) -- RED BORDER
 	panel.Parent            = screen
+	
+	print("[PetUI] Panel created and parented to screen. Panel.Visible:", panel.Visible)
 
-	local cornerPanel = Instance.new("UICorner")
-	cornerPanel.CornerRadius = Config.Theme.CornerRadius
-	cornerPanel.Parent = panel
+	local title             = Instance.new("TextLabel")
+	title.Size              = UDim2.new(1, 0, 0, 50)
+	title.Text              = "🐾 PET SHOP & INVENTORY"
+	title.TextColor3        = Color3.new(1, 1, 1)
+	title.Font              = Enum.Font.GothamBlack
+	title.TextSize          = 24
+	title.Parent            = panel
 
 	local strokePanel = Instance.new("UIStroke")
 	strokePanel.Color = Config.Theme.StrokeColor
@@ -190,14 +193,14 @@ local function buildPetUI(): ScreenGui
 	grad.Rotation = 45
 	grad.Parent = panel
 
-	local title = Instance.new("TextLabel")
-	title.Size  = UDim2.new(1, 0, 0, 64)
-	title.BackgroundTransparency = 1
-	title.Text  = "MY PETS"
-	title.TextColor3 = Config.Theme.TextMain
-	title.Font  = Enum.Font.GothamBlack
-	title.TextSize = 24
-	title.Parent = panel
+	local invTitle = Instance.new("TextLabel")
+	invTitle.Size  = UDim2.new(1, 0, 0, 64)
+	invTitle.BackgroundTransparency = 1
+	invTitle.Text  = "MY PETS"
+	invTitle.TextColor3 = Config.Theme.TextMain
+	invTitle.Font  = Enum.Font.GothamBlack
+	invTitle.TextSize = 24
+	invTitle.Parent = panel
 
 	local closeBtn = Instance.new("TextButton")
 	closeBtn.Size  = UDim2.new(0, 44, 0, 44)
@@ -307,37 +310,37 @@ end
 
 function PetUI.Init(overrideParent: Instance?)
 	local pg = overrideParent or getPlayerGui()
-	if not pg then return end
-	
-	-- [SMART BINDING] Detect existing PetUI
-	local existing: ScreenGui? = nil
-	for _, child in ipairs(pg:GetChildren()) do
-		if child:IsA("ScreenGui") then
-			if child.Name == "PetUI" or child:FindFirstChild("PetGrid", true) then
-				if not existing then
-					existing = child
-				else
-					child:Destroy()
-				end
-			end
-		end
+	if not pg then 
+		warn("[PetUI] Init failed: PlayerGui not found") 
+		return 
 	end
 	
-	if existing then
-		petScreen = existing
-		print("ℹ️ [PetUI] Using existing ScreenGui for smart binding.")
-		return
-	end
+	local existing = (pg :: any):FindFirstChild("PetUI")
+	if existing then existing:Destroy() end
 
-	local screen = buildPetUI()
-	screen.Parent = pg
-	petScreen = screen
+	local newScreen = buildPetUI()
+	petScreen = newScreen
+	newScreen.Parent = (pg :: any)
 	
-	print("[PetUI] Initialized")
+	print("[PetUI] Init complete. petScreen.Parent:", (newScreen.Parent :: any).Name)
 end
 
 function PetUI.Open()
-	if petScreen then petScreen.Enabled = true; isOpen = true end
+	local pg = getPlayerGui()
+	if not pg then return end
+	
+	-- Verify petScreen is valid and in PlayerGui
+	local isValid = petScreen and petScreen.Parent == pg and petScreen:IsDescendantOf(pg)
+	if not isValid then
+		print("⚠️ [PetUI] petScreen invalid or detached. Re-initializing...")
+		PetUI.Init()
+	end
+
+	if petScreen then 
+		petScreen.Enabled = true
+		isOpen = true 
+		print("[PetUI] Opened successfully.")
+	end
 end
 
 function PetUI.Close()

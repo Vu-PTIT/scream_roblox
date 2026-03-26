@@ -98,9 +98,11 @@ export type MonsterConfig = {
 	MovementSpeed: number,
 	GoldDrop: number,
 	EggDropChance: number,  -- 0.0 → 1.0
+	KnockbackResistance: number, -- 0.0 (max far) -> 1.0 (no move)
 	SpawnZone: string,      -- Tên khu vực ("PvEZone1", ...)
 	IsBoss: boolean?,       -- (Nâng cao) Có phải boss không?
 }
+
 
 -- Config pet template
 export type PetConfig = {

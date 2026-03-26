@@ -382,12 +382,13 @@ end
 -- ============================================================
 -- BUILD SHOP UI
 -- ============================================================
-local function buildShop(): ScreenGui
-	local screen            = Instance.new("ScreenGui")
+local function buildShop(existingScreen: ScreenGui?): ScreenGui
+	local screen = existingScreen or Instance.new("ScreenGui")
 	screen.Name             = "Shop"
 	screen.ResetOnSpawn     = false
 	screen.DisplayOrder     = 20
 	screen.IgnoreGuiInset   = true
+	screen.ZIndexBehavior   = Enum.ZIndexBehavior.Sibling
 	screen.Enabled          = false
 
 	-- Background overlay
@@ -405,7 +406,9 @@ local function buildShop(): ScreenGui
 	panel.Position          = UDim2.new(0.5, -260, 0.5, -290)
 	panel.BackgroundColor3  = Config.Theme.Background
 	panel.BackgroundTransparency = Config.Theme.PanelTransparency
-	panel.BorderSizePixel   = 0
+	panel.BorderSizePixel   = 4
+	panel.BorderColor3      = Color3.fromRGB(0, 255, 255) -- CYAN BORDER
+	panel.ZIndex            = 1
 	panel.Parent            = screen
 
 	local cornerPanel = Instance.new("UICorner")
@@ -428,6 +431,7 @@ local function buildShop(): ScreenGui
 	title.Font              = Enum.Font.GothamBlack
 	title.TextSize          = 22
 	title.BorderSizePixel   = 0
+	title.ZIndex            = 2
 	title.Parent            = panel
 
 	local titleGradient = Instance.new("UIGradient")
@@ -593,45 +597,38 @@ end
 -- ============================================================
 function Shop.Init(overrideParent: Instance?)
 	local pg = overrideParent or getPlayerGui()
-	if not pg then return end
-	
-	-- [SMART BINDING] Detect existing Shop
-	local existing: ScreenGui? = nil
-	for _, child in ipairs(pg:GetChildren()) do
-		if child:IsA("ScreenGui") then
-			if child.Name == "Shop" or child:FindFirstChild("Panel", true) then
-				if not existing then
-					existing = child
-				else
-					child:Destroy()
-				end
-			end
-		end
+	if not pg then 
+		warn("[Shop] Init failed: PlayerGui not found") 
+		return 
 	end
 	
-	if existing then
-		shopScreen = existing
-		print("ℹ️ [Shop] Using existing ScreenGui for smart binding.")
-		return
+	local existing = (pg :: any):FindFirstChild("Shop")
+	if existing then 
+		print("ℹ️ [Shop] Destroying existing UI to rebuild.")
+		existing:Destroy() 
 	end
 
-	local screen = buildShop()
-	screen.Parent = pg
-	shopScreen = screen
+	local newScreen = buildShop()
+	shopScreen = newScreen
+	newScreen.Parent = (pg :: any)
 	
-	-- Populate initial cards for Studio/Bake mode
-	pcall(function()
-		local scroll = screen:FindFirstChild("CardList", true) :: ScrollingFrame?
-		if scroll and #scroll:GetChildren() <= 2 then -- Only if empty (UIListLayout + UIGradient count as children)
-			-- Logic to show initial tab if needed
-		end
-	end)
+	print("[Shop] Init complete. shopScreen.Parent:", (newScreen.Parent :: any).Name)
 end
 
 function Shop.Open()
-	if shopScreen then
+	local pg = getPlayerGui()
+	if not pg then return end
+
+	local isValid = shopScreen and shopScreen.Parent == pg and shopScreen:IsDescendantOf(pg)
+	if not isValid then
+		print("⚠️ [Shop] shopScreen invalid or detached. Re-initializing...")
+		Shop.Init()
+	end
+
+	if shopScreen then 
 		shopScreen.Enabled = true
-		isOpen = true
+		isOpen = true 
+		print("[Shop] Opened successfully.")
 	end
 end
 

@@ -31,6 +31,7 @@ local function buildRebirthUI(): ScreenGui
 	screen.ResetOnSpawn    = false
 	screen.DisplayOrder    = 20
 	screen.IgnoreGuiInset  = true
+	screen.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
 	screen.Enabled         = false
 
 	local overlay          = Instance.new("Frame")
@@ -47,7 +48,9 @@ local function buildRebirthUI(): ScreenGui
 	panel.AnchorPoint      = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3 = Config.Theme.Background
 	panel.BackgroundTransparency = Config.Theme.PanelTransparency
-	panel.BorderSizePixel  = 0
+	panel.BorderSizePixel  = 4
+	panel.BorderColor3     = Color3.fromRGB(255, 200, 0) -- GOLD BORDER
+	panel.ZIndex           = 1
 	panel.Parent           = screen
 
 	local corner = Instance.new("UICorner")
@@ -170,35 +173,35 @@ local function buildRebirthUI(): ScreenGui
 end
 
 function RebirthUI.Init(overrideParent: Instance?)
-	local pg = overrideParent or getPlayerGui()
-	if not pg then return end
-	
-	-- [SMART BINDING] Detect existing RebirthUI
-	local existing: ScreenGui? = nil
-	for _, child in ipairs(pg:GetChildren()) do
-		if child:IsA("ScreenGui") then
-			if child.Name == "RebirthUI" or child:FindFirstChild("MultPreview", true) then
-				if not existing then
-					existing = child
-				else
-					child:Destroy()
-				end
-			end
-		end
+	local pg = (overrideParent or getPlayerGui()) :: Instance?
+	if not pg then 
+		warn("[RebirthUI] Init failed: PlayerGui not found") 
+		return 
 	end
 	
-	if existing then
-		rebirthScreen = existing
-		print("ℹ️ [RebirthUI] Using existing ScreenGui for smart binding.")
-		return
+	local existing = (pg :: any):FindFirstChild("RebirthUI")
+	if existing then 
+		print("ℹ️ [RebirthUI] Destroying existing UI to rebuild.")
+		existing:Destroy() 
 	end
 
-	local screen = buildRebirthUI()
-	screen.Parent = pg
-	rebirthScreen = screen
+	local newScreen = buildRebirthUI()
+	rebirthScreen = newScreen
+	newScreen.Parent = (pg :: any)
+	
+	print("[RebirthUI] Init complete. Parent:", (newScreen.Parent :: any).Name)
 end
 
 function RebirthUI.Open()
+	local pg = getPlayerGui()
+	if not pg then return end
+
+	local isValid = rebirthScreen and rebirthScreen.Parent == pg and rebirthScreen:IsDescendantOf(pg)
+	if not isValid then
+		print("⚠️ [RebirthUI] rebirthScreen invalid or detached. Re-initializing...")
+		RebirthUI.Init()
+	end
+
 	if rebirthScreen then
 		-- Refresh preview
 		if DataController then
@@ -214,6 +217,7 @@ function RebirthUI.Open()
 		end
 		rebirthScreen.Enabled = true
 		_isOpen = true
+		print("[RebirthUI] Opened successfully.")
 	end
 end
 

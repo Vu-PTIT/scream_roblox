@@ -185,6 +185,10 @@ local function createMonsterModel(cfg: Types.MonsterConfig, position: Vector3): 
 	humanoid.DisplayName = cfg.DisplayName
 	humanoid.Parent      = model
 
+	-- Set attributes for ShoutService lookup
+	model:SetAttribute("Defense", cfg.Defense)
+	model:SetAttribute("KnockbackResistance", cfg.KnockbackResistance or 0)
+
 	-- Health display bar
 	local billGui       = Instance.new("BillboardGui")
 	billGui.Size        = UDim2.new(4, 0, 0.7, 0)
@@ -316,6 +320,9 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 
 	-- Pathfinding AI Loop
 	task.spawn(function()
+		local lastWander = 0
+		local wanderInterval = math.random(3, 6)
+
 		while instance.IsAlive and model.Parent do
 			task.wait(0.5)
 			if not instance.IsAlive then break end
@@ -395,10 +402,22 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 					end
 				end
 			else
-				-- Nếu bị mất mục tiêu (player chạy mất dẹp ra ngoài zone), quái vật đi lùi về giữa bãi spawn
-				local flatDistToSpawn = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(spawnPos.X, 0, spawnPos.Z)).Magnitude
-				if flatDistToSpawn > 10 then
-					humanoid:MoveTo(spawnPos)
+				-- Nếu không có player gần, quái vật đi "linh tinh" trong zone
+				local now = os.clock()
+				if now - lastWander >= wanderInterval then
+					lastWander = now
+					wanderInterval = math.random(4, 10) -- Randomize interval cho lần tới
+					
+					-- Tính toán điểm random mới trong zone
+					local randomPos = zoneCenter + Vector3.new(
+						math.random(-math.floor(zoneSizeX/2) + 5, math.floor(zoneSizeX/2) - 5),
+						0,
+						math.random(-math.floor(zoneSizeZ/2) + 5, math.floor(zoneSizeZ/2) - 5)
+					)
+					
+					-- Giữ nguyên độ cao Y hiện tại để tránh quái vật bay/chìm
+					randomPos = Vector3.new(randomPos.X, hrp.Position.Y, randomPos.Z)
+					humanoid:MoveTo(randomPos)
 				end
 			end
 		end

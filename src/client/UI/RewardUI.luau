@@ -30,6 +30,7 @@ local function buildUI(): ScreenGui
 	screen.ResetOnSpawn    = false
 	screen.DisplayOrder    = 20
 	screen.IgnoreGuiInset  = true
+	screen.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
 	screen.Enabled         = false
 
 	local overlay           = Instance.new("Frame")
@@ -46,7 +47,9 @@ local function buildUI(): ScreenGui
 	panel.AnchorPoint      = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3 = Config.Theme.Background
 	panel.BackgroundTransparency = Config.Theme.PanelTransparency
-	panel.BorderSizePixel  = 0
+	panel.BorderSizePixel  = 4
+	panel.BorderColor3     = Color3.fromRGB(100, 255, 100) -- LIGHT GREEN BORDER
+	panel.ZIndex           = 1
 	panel.Parent           = screen
 
 	local corner = Instance.new("UICorner")
@@ -71,6 +74,7 @@ local function buildUI(): ScreenGui
 	title.TextColor3 = Config.Theme.TextMain
 	title.Font     = Enum.Font.GothamBlack
 	title.TextSize = 24
+	title.ZIndex   = 2
 	title.Parent   = panel
 
 	local closeBtn = Instance.new("TextButton")
@@ -211,40 +215,30 @@ local function updateUIState()
 end
 
 function RewardUI.Init(overrideParent: Instance?)
-	local pg = overrideParent or getPlayerGui()
-	if not pg then return end
-	
-	-- [SMART BINDING] Detect existing RewardUI
-	local existing: ScreenGui? = nil
-	for _, child in ipairs(pg:GetChildren()) do
-		if child:IsA("ScreenGui") then
-			if child.Name == "RewardUI" or child:FindFirstChild("RewardList", true) then
-				if not existing then
-					existing = child
-				else
-					child:Destroy()
-				end
-			end
-		end
+	local pg = (overrideParent or getPlayerGui()) :: Instance?
+	if not pg then 
+		warn("[RewardUI] Init failed: PlayerGui not found") 
+		return 
 	end
 	
-	if existing then
-		rewardScreen = existing
-		print("ℹ️ [RewardUI] Using existing ScreenGui for smart binding.")
-	else
-		local screen = buildUI()
-		screen.Parent = pg
-		rewardScreen = screen
+	local existing = (pg :: any):FindFirstChild("RewardUI")
+	if existing then 
+		print("ℹ️ [RewardUI] Destroying existing UI to rebuild.")
+		existing:Destroy() 
 	end
+
+	local newScreen = buildUI()
+	rewardScreen = newScreen
+	newScreen.Parent = (pg :: any)
+	
+	print("[RewardUI] Init complete. Parent:", (newScreen.Parent :: any).Name)
 	
 	task.defer(function()
 		task.wait(0.5)
 		if DataController then
-			DataController.OnDataChanged(function(key: string, value: any)
+			DataController.OnDataChanged(function(key: string, _)
 				if key == "PlayTime" or key == "ClaimedPlaytimeRewards" or key == "__all__" then
-					if isOpen then
-						updateUIState()
-					end
+					if isOpen then updateUIState() end
 				end
 			end)
 		end
@@ -252,10 +246,20 @@ function RewardUI.Init(overrideParent: Instance?)
 end
 
 function RewardUI.Open()
+	local pg = getPlayerGui()
+	if not pg then return end
+
+	local isValid = rewardScreen and rewardScreen.Parent == pg and rewardScreen:IsDescendantOf(pg)
+	if not isValid then
+		print("⚠️ [RewardUI] rewardScreen invalid or detached. Re-initializing...")
+		RewardUI.Init()
+	end
+
 	if rewardScreen then 
 		rewardScreen.Enabled = true
 		isOpen = true 
 		updateUIState()
+		print("[RewardUI] Opened successfully.")
 	end
 end
 

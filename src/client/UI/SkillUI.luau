@@ -210,11 +210,13 @@ local function createSkillCard(parent: Instance, skill: Types.SkillData, index: 
 end
 
 local function buildSkillUI(): ScreenGui
+	print("[SkillUI] Building UI...")
 	local screen            = Instance.new("ScreenGui")
 	screen.Name             = "SkillUI"
 	screen.ResetOnSpawn     = false
-	screen.DisplayOrder     = 20
+	screen.DisplayOrder     = 999
 	screen.IgnoreGuiInset   = true
+	screen.ZIndexBehavior   = Enum.ZIndexBehavior.Sibling
 	screen.Enabled          = false
 
 	local overlay           = Instance.new("Frame")
@@ -230,8 +232,10 @@ local function buildSkillUI(): ScreenGui
 	panel.Position          = UDim2.new(0.5, 0, 0.5, 0)
 	panel.AnchorPoint       = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3  = Config.Theme.Background
-	panel.BackgroundTransparency = Config.Theme.PanelTransparency
-	panel.BorderSizePixel   = 0
+	panel.BackgroundTransparency = 0.5
+	panel.ZIndex            = 1
+	panel.BorderSizePixel   = 4
+	panel.BorderColor3      = Color3.fromRGB(180, 50, 255) -- PURPLE BORDER
 	panel.Parent            = screen
 
 	local cornerPanel = Instance.new("UICorner")
@@ -256,6 +260,7 @@ local function buildSkillUI(): ScreenGui
 	title.TextColor3 = Config.Theme.TextMain
 	title.Font  = Enum.Font.GothamBlack
 	title.TextSize = 24
+	title.ZIndex = 2
 	title.Parent = panel
 
 	local closeBtn = Instance.new("TextButton")
@@ -406,31 +411,20 @@ end
 
 function SkillUI.Init(overrideParent: Instance?)
 	local pg = (overrideParent or getPlayerGui()) :: Instance?
-	if not pg then return end
-	
-	-- [SMART BINDING] Detect existing SkillUI
-	local existing: ScreenGui? = nil
-	for _, child in ipairs(pg:GetChildren()) do
-		if child:IsA("ScreenGui") then
-			if child.Name == "SkillUI" or child:FindFirstChild("SkillGrid", true) then
-				if not existing then
-					existing = child
-				else
-					child:Destroy()
-				end
-			end
-		end
+	if not pg then 
+		warn("[SkillUI] Init failed: PlayerGui not found") 
+		return 
 	end
 	
-	if existing then
-		skillScreen = existing
-		print("ℹ️ [SkillUI] Using existing ScreenGui for smart binding.")
-	else
-		local screen = buildSkillUI()
-		screen.Parent = pg
-		skillScreen = screen
-	end
+	local existing = (pg :: any):FindFirstChild("SkillUI")
+	if existing then existing:Destroy() end
 
+	local newScreen = buildSkillUI()
+	skillScreen = newScreen
+	if not newScreen.Parent then
+		newScreen.Parent = (pg :: any)
+	end
+	
 	SkillHatchUI.Init()
 
 	-- Subscribe to Skill Roll Event
@@ -439,10 +433,25 @@ function SkillUI.Init(overrideParent: Instance?)
 			SkillHatchUI.PlayHatch(skillData.Name, skillData.Rarity)
 		end
 	end)
+	
+	print("[SkillUI] Init complete. skillScreen.Parent:", (newScreen.Parent :: any).Name)
 end
 
 function SkillUI.Open()
-	if skillScreen then skillScreen.Enabled = true; isOpen = true end
+	local pg = getPlayerGui()
+	if not pg then return end
+
+	local isValid = skillScreen and skillScreen.Parent == pg and skillScreen:IsDescendantOf(pg)
+	if not isValid then
+		print("⚠️ [SkillUI] skillScreen invalid or detached. Re-initializing...")
+		SkillUI.Init()
+	end
+
+	if skillScreen then 
+		skillScreen.Enabled = true
+		isOpen = true 
+		print("[SkillUI] Opened successfully.")
+	end
 end
 
 function SkillUI.Close()
