@@ -158,8 +158,8 @@ local function HUDApp()
         }),
 
         Stats = React.createElement(StatsBox, {
-            Attack = (data.Attack or 0) + (data.DamageUpgradeLevel or 0) * Config.Upgrades[1].StatPerLevel,
-            Defense = (data.Defense or 0) + (data.ArmorUpgradeLevel or 0) * Config.Upgrades[3].StatPerLevel,
+            Attack = (data.Attack or 0) + (data.DamageUpgradeLevel or 0) * (Config.GetUpgrade("damage_1") and Config.GetUpgrade("damage_1").StatPerLevel or 5),
+            Defense = (data.Defense or 0) + (data.ArmorUpgradeLevel or 0) * (Config.GetUpgrade("armor_1") and Config.GetUpgrade("armor_1").StatPerLevel or 10),
             Position = UDim2.new(1, -15, 1, -15), AnchorPoint = Vector2.new(1, 1),
         })
     })

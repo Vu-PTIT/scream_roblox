@@ -12,7 +12,11 @@ local VocalPointsLB = DataStoreService:GetOrderedDataStore("ShoutSim_VocalPoints
 local function updateBoard(data: any)
     local board = workspace:FindFirstChild("Map") and workspace:FindFirstChild("Map") :: any
     board = board and board:FindFirstChild("GlobalLeaderboardBoard")
-    if not board then return end
+    
+    if not board then 
+        warn("⚠️ [LeaderboardService] Cannot find GlobalLeaderboardBoard in workspace.Map. Update aborted.")
+        return 
+    end
     
     local gui = board:FindFirstChild("LeaderboardGUI")
     local list = gui and gui:FindFirstChild("ListFrame")

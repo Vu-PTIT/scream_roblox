@@ -3,6 +3,7 @@
 -- Server-side: Tự động khởi tạo Bản đồ (Safe Zone, PvP) và quản lý logic khu vực
 
 local MapService = {}
+local RunService = game:GetService("RunService")
 local Shared = game.ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 
@@ -138,34 +139,153 @@ local function createRebirthAreas()
 		rebirthZonesFolder.Parent = mapFolder
 	end
 
-	local RunService = game:GetService("RunService")
-	if not RunService:IsRunning() then return end
-
-	local DataService = require(script.Parent.DataService)
-	local Remotes = game.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
-
 	local areas = {
-		{ Name = "Desert", Req = 1, Color = Color3.fromRGB(244, 164, 96), Pos = Vector3.new(0, 0, -200) },
-		{ Name = "IceZone", Req = 3, Color = Color3.fromRGB(173, 216, 230), Pos = Vector3.new(0, 0, -400) },
-		{ Name = "VoidRealm", Req = 7, Color = Color3.fromRGB(75, 0, 130), Pos = Vector3.new(0, 0, -600) },
-		{ Name = "HeavenlyStage", Req = 15, Color = Color3.fromRGB(255, 250, 205), Pos = Vector3.new(0, 0, -800) },
+		{ 
+			Name = "Desert", 
+			Req = 1, 
+			Color = Color3.fromRGB(244, 164, 96), 
+			Pos = Vector3.new(0, 0, -200),
+			Material = Enum.Material.Sand,
+			VFX = "Desert"
+		},
+		{ 
+			Name = "IceZone", 
+			Req = 3, 
+			Color = Color3.fromRGB(173, 216, 230), 
+			Pos = Vector3.new(0, 0, -400),
+			Material = Enum.Material.Ice,
+			VFX = "Snow"
+		},
+		{ 
+			Name = "VoidRealm", 
+			Req = 7, 
+			Color = Color3.fromRGB(30, 0, 50), 
+			Pos = Vector3.new(0, 0, -600),
+			Material = Enum.Material.CorrodedMetal,
+			VFX = "Void"
+		},
+		{ 
+			Name = "HeavenlyStage", 
+			Req = 15, 
+			Color = Color3.fromRGB(255, 255, 230), 
+			Pos = Vector3.new(0, 0, -800),
+			Material = Enum.Material.Neon,
+			VFX = "Divine"
+		},
 	}
+
+	-- Hàm hỗ trợ tạo hiệu ứng môi trường
+	local function applyAreaVFX(base: Part, vfxType: string)
+		if vfxType == "Desert" then
+			local emitter = Instance.new("ParticleEmitter")
+			emitter.Name = "SandDust"
+			emitter.Color = ColorSequence.new(Color3.fromRGB(255, 200, 100))
+			emitter.Size = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 0),
+				NumberSequenceKeypoint.new(0.5, 2),
+				NumberSequenceKeypoint.new(1, 0)
+			})
+			emitter.Transparency = NumberSequence.new(0.6)
+			emitter.Lifetime = NumberRange.new(2, 4)
+			emitter.Rate = 20
+			emitter.Speed = NumberRange.new(3, 8)
+			emitter.VelocityInheritance = 0.1
+			emitter.SpreadAngle = Vector2.new(45, 45)
+			emitter.Parent = base
+		elseif vfxType == "Snow" then
+			local emitter = Instance.new("ParticleEmitter")
+			emitter.Name = "SnowFlakes"
+			emitter.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+			emitter.Size = NumberSequence.new(0.5)
+			emitter.Transparency = NumberSequence.new(0.2)
+			emitter.Lifetime = NumberRange.new(5, 8)
+			emitter.Rate = 40
+			emitter.Speed = NumberRange.new(10, 20)
+			emitter.Acceleration = Vector3.new(0, -5, 0) -- Rơi xuống
+			emitter.EmissionDirection = Enum.NormalId.Top
+			emitter.SpreadAngle = Vector2.new(180, 180)
+			-- Cho xuất hiện ngẫu nhiên bên trên zone
+			emitter.Parent = base
+			
+			-- Thêm chút sương mù cục bộ (Fog part)
+			local fogPart = Instance.new("Part")
+			fogPart.Name = "LocalFog"
+			fogPart.Size = base.Size + Vector3.new(0, 40, 0)
+			fogPart.Position = base.Position + Vector3.new(0, 20, 0)
+			fogPart.Anchored = true
+			fogPart.CanCollide = false
+			fogPart.Transparency = 0.85
+			fogPart.Color = Color3.fromRGB(200, 230, 255)
+			fogPart.Material = Enum.Material.ForceField
+			fogPart.Parent = base.Parent
+		elseif vfxType == "Void" then
+			local emitter = Instance.new("ParticleEmitter")
+			emitter.Name = "VoidSmoke"
+			emitter.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 0, 100))
+			})
+			emitter.Size = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 2),
+				NumberSequenceKeypoint.new(1, 10)
+			})
+			emitter.Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 0.4),
+				NumberSequenceKeypoint.new(0.8, 0.8),
+				NumberSequenceKeypoint.new(1, 1)
+			})
+			emitter.Lifetime = NumberRange.new(3, 6)
+			emitter.Rate = 15
+			emitter.Speed = NumberRange.new(2, 5)
+			emitter.SpreadAngle = Vector2.new(30, 30)
+			emitter.Parent = base
+		elseif vfxType == "Divine" then
+			local emitter = Instance.new("ParticleEmitter")
+			emitter.Name = "DivineSparkles"
+			emitter.Color = ColorSequence.new(Color3.fromRGB(255, 255, 150))
+			emitter.LightEmission = 1
+			emitter.Size = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 0),
+				NumberSequenceKeypoint.new(0.2, 1),
+				NumberSequenceKeypoint.new(0.8, 1),
+				NumberSequenceKeypoint.new(1, 0)
+			})
+			emitter.Lifetime = NumberRange.new(1, 3)
+			emitter.Rate = 50
+			emitter.Speed = NumberRange.new(5, 15)
+			emitter.SpreadAngle = Vector2.new(180, 180)
+			emitter.Parent = base
+		end
+	end
 
 	local blockedGates = {}
 
 	for _, area in ipairs(areas) do
+		local zoneFolder = workspace:FindFirstChild(area.Name)
+		if not zoneFolder then
+			zoneFolder = Instance.new("Folder")
+			zoneFolder.Name = area.Name
+			zoneFolder.Parent = workspace
+		end
+
 		local floor = Instance.new("Part")
-		floor.Name = area.Name .. "_Floor"
-		floor.Size = Vector3.new(100, 1, 100)
+		floor.Name = "Base"
+		floor.Size = Vector3.new(150, 1, 150)
 		floor.Position = area.Pos
 		floor.Anchored = true
 		floor.Color = area.Color
-		floor.Parent = rebirthZonesFolder
+		floor.Material = area.Material or Enum.Material.Sand
+		floor.Parent = zoneFolder
+
+		-- Apply visual effects
+		if area.VFX then
+			applyAreaVFX(floor, area.VFX)
+		end
 
 		local blocker = Instance.new("Part")
 		blocker.Name = area.Name .. "_Gate"
-		blocker.Size = Vector3.new(100, 20, 5)
-		blocker.Position = area.Pos + Vector3.new(0, 10, 50)
+		blocker.Size = Vector3.new(150, 20, 5)
+		blocker.Position = area.Pos + Vector3.new(0, 10, 75)
 		blocker.Anchored = true
 		blocker.CanCollide = false
 		blocker.Transparency = 0.5
@@ -188,7 +308,7 @@ local function createRebirthAreas()
 		table.insert(blockedGates, {
 			Req = area.Req,
 			Name = area.Name,
-			MinZ = area.Pos.Z - 60,
+			MinZ = area.Pos.Z - 75,
 			MaxZ = blocker.Position.Z + 2,
 			MinX = blocker.Position.X - (blocker.Size.X / 2),
 			MaxX = blocker.Position.X + (blocker.Size.X / 2),
@@ -196,8 +316,10 @@ local function createRebirthAreas()
 		})
 	end
 
-	-- Chỉ chạy logic chặn cổng khi game đang chạy
 	if RunService:IsRunning() then
+		local DataService = require(script.Parent.DataService)
+		local Remotes = game.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
+		
 		RunService.Heartbeat:Connect(function()
 			for _, player in ipairs(game.Players:GetPlayers()) do
 				local char = player.Character
@@ -238,12 +360,6 @@ local function createBossRoomGates()
 		gatesFolder.Name = "BossGates"
 		gatesFolder.Parent = mapFolder
 	end
-
-	local RunService = game:GetService("RunService")
-	if not RunService:IsRunning() then return end
-
-	local DataService = require(script.Parent.DataService)
-	local Remotes = game.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
 
 	local bossAreas = {
 		{ Name = "BossRoom", Req = 1, Pos = Vector3.new(-200, 0, 0), Size = Vector3.new(150, 1, 150), Dir = Vector3.new(1, 0, 0) },
@@ -289,6 +405,9 @@ local function createBossRoomGates()
 	end
 
 	if RunService:IsRunning() then
+		local DataService = require(script.Parent.DataService)
+		local Remotes = game.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
+		
 		RunService.Heartbeat:Connect(function()
 			for _, player in ipairs(game.Players:GetPlayers()) do
 				local char = player.Character
@@ -331,7 +450,7 @@ local function createStations()
 		{ id = "Shop", name = "Upgrade Station", color = Color3.fromRGB(50, 150, 255), posOffset = Vector3.new(20, 2, -15) },
 		{ id = "Pet", name = "Pet Station", color = Color3.fromRGB(255, 200, 50), posOffset = Vector3.new(-20, 2, -15) },
 		{ id = "Rebirth", name = "Rebirth Station", color = Color3.fromRGB(150, 50, 200), posOffset = Vector3.new(0, 2, 25) },
-		{ id = "Skill", name = "Skill Scroll Gacha", color = Color3.fromRGB(180, 100, 255), posOffset = Config.Map.SkillStation.Position },
+		{ id = "Skill", name = "Skill Scroll Gacha", color = Color3.fromRGB(180, 100, 255), posOffset = Config.Map.SkillStation.Offset },
 		{ id = "Inventory", name = "My Inventory (Bag)", color = Color3.fromRGB(0, 255, 255), posOffset = Vector3.new(0, 2, -15) },
 		{ id = "Quest", name = "Quest Board", color = Color3.fromRGB(100, 255, 150), posOffset = Vector3.new(-25, 2, 20) },
 		{ id = "Reward", name = "Reward Chest", color = Color3.fromRGB(255, 100, 255), posOffset = Vector3.new(25, 2, 20) },

@@ -186,7 +186,7 @@ local function buildHUD(overrideParent: Instance?)
 
 	local topRight: Frame
 	if tr and tr:IsA("Frame") then
-		topRight = tr
+		topRight = tr :: Frame
 		print("ℹ️ [HUD] Bound to existing TopRight container.")
 	else
 		topRight = Instance.new("Frame")
@@ -281,7 +281,7 @@ local function buildHUD(overrideParent: Instance?)
 
 	local vpf = vpContainer:FindFirstChild("VPFill", true)
 	if vpf and vpf:IsA("Frame") then
-		vpBarFill = vpf
+		vpBarFill = vpf :: Frame
 	else
 		local bg = vpContainer:FindFirstChildOfClass("Frame", true)
 		if bg then
@@ -474,8 +474,10 @@ local function updateHUD(data: any)
 	if rebirthLabel then rebirthLabel.Text = string.format("⭐ Rebirth: %d", d.RebirthCount or 0) end
 	if hpLabel then hpLabel.Text = "HP: 100 / 100" end -- Default for Studio
 	
-	local totalAtk = (d.Attack or 10) + (d.DamageUpgradeLevel or 0) * (Config.Upgrades[1].StatPerLevel or 0)
-	local totalDef = (d.Defense or 10) + (d.ArmorUpgradeLevel or 0) * (Config.Upgrades[3].StatPerLevel or 0)
+	local dmgCfg = Config.GetUpgrade("damage_1")
+	local armCfg = Config.GetUpgrade("armor_1")
+	local totalAtk = (d.Attack or 10) + (d.DamageUpgradeLevel or 0) * (dmgCfg and dmgCfg.StatPerLevel or 0)
+	local totalDef = (d.Defense or 10) + (d.ArmorUpgradeLevel or 0) * (armCfg and armCfg.StatPerLevel or 0)
 	if atkLabel then atkLabel.Text = string.format("Damage: %d", totalAtk) end
 	if defLabel then defLabel.Text = string.format("Armor: %d", totalDef) end
 end
@@ -566,52 +568,8 @@ end
 -- INIT
 -- ============================================================
 function HUD.Init(overrideParent: Instance?)
-	buildHUD(overrideParent)
-	if screen then setupHealthBar() end
-	
-	pcall(function() game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Health, false) end)
-
-	-- Initial updates for Studio/Bake mode
-	updateHUD({})
-	
-	task.defer(function()
-		task.wait(1)
-		local ok, DC = pcall(function() return require(script.Parent.Parent.Controllers.DataController) end)
-		if ok and DC then
-			local data = DC.GetData()
-			if data then updateHUD(data) end
-			-- Final data population
-			updateHUD({})
-			
-			-- [SAFETY] Delayed cleanup to handle any late-rendering duplicates
-			if RunService:IsRunning() then
-				task.delay(3, function()
-					local pg = (LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui"))
-					if not pg then return end
-					local screen = pg:FindFirstChild("HUD")
-					if not (screen and screen:IsA("ScreenGui")) then return end
-					
-					-- Nuke any Vanilla-style HPContainer if HealthContainer exists
-					local h1 = screen:FindFirstChild("HealthContainer")
-					local h2 = screen:FindFirstChild("HPContainer")
-					if h1 and h2 and h1 ~= h2 then h2:Destroy(); print("🧹 [HUD] Late-cleanup: HPContainer removed") end
-					
-					-- Nuke any StatsBox if StatsFrame exists
-					local s1 = screen:FindFirstChild("StatsFrame")
-					local s2 = screen:FindFirstChild("StatsBox")
-					if s1 and s2 and s1 ~= s2 then s2:Destroy(); print("🧹 [HUD] Late-cleanup: StatsBox removed") end
-				end)
-			end
-
-			print("[HUD] Initialized")
-			if DC.OnDataChanged then
-				DC.OnDataChanged(function() 
-					local d = DC.GetData() 
-					if d then updateHUD(d) end 
-				end)
-			end
-		end
-	end)
+	-- [DISABLED] HUD.luau is legacy. Using HUDApp.luau (React) instead.
+	warn("[HUD] Legacy HUD.Init() called but is DISABLED. Use HUDApp instead.")
 end
 
 return HUD

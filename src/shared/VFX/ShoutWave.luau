@@ -110,6 +110,29 @@ local function createBeam(origin: CFrame, color: Color3, distance: number, power
 	end)
 end
 
+-- 4. Vòng tròn chấn động (Expanding Ring) cho Circular Shout
+local function createExpandingRing(origin: CFrame, color: Color3, sizeFactor: number, duration: number, maxRadius: number)
+	local ring = Instance.new("Part")
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CastShadow = false
+	ring.Shape = Enum.PartType.Cylinder
+	-- Xoay part để mặt tròn nằm ngang (trục X của Cylinder hướng lên trên)
+	ring.CFrame = (origin * CFrame.new(0, -1, 0)) * CFrame.Angles(0, 0, math.pi / 2) 
+	ring.Size = Vector3.new(0.5, 4 * sizeFactor, 4 * sizeFactor)
+	ring.Material = Enum.Material.Neon
+	ring.Color = color
+	ring.Transparency = 0.4
+	ring.Parent = workspace
+
+	local tween = TweenService:Create(ring, TweenInfo.new(duration, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.1, maxRadius * 2, maxRadius * 2),
+		Transparency = 1,
+	})
+	tween:Play()
+	Debris:AddItem(ring, duration + 0.1)
+end
+
 -- 4. Particle bắn khí mạnh do tiếng hét
 local function emitShoutParticles(origin: CFrame, color: Color3, distance: number, shoutConfig: any)
 	local anchor = Instance.new("Part")
@@ -145,9 +168,13 @@ local function emitShoutParticles(origin: CFrame, color: Color3, distance: numbe
 	local spreadAngle = shoutConfig and shoutConfig.Angle or 12
 	if shoutConfig then
 		-- Adjust spread for visual representation. 180 means 360 circle. 
-		-- We map 180 half-angle -> 180 spread.
 		local maxSpread = math.clamp(spreadAngle, 10, 180)
 		emitter.SpreadAngle = Vector2.new(-maxSpread, maxSpread)
+		
+		-- Nếu là Circular (360), cho phép hạt bay theo mọi hướng y
+		if maxSpread >= 170 then
+			emitter.VelocityInheritance = 0
+		end
 	else
 		-- Tia bắn hình nón hẹp default
 		emitter.SpreadAngle = Vector2.new(-12, 12)
@@ -156,7 +183,7 @@ local function emitShoutParticles(origin: CFrame, color: Color3, distance: numbe
 	emitter.Drag = 3
 	emitter.Parent = anchor
 
-	emitter:Emit(60)
+	emitter:Emit(if spreadAngle >= 170 then 100 else 60)
 	Debris:AddItem(anchor, 1.0)
 end
 
@@ -180,6 +207,29 @@ function ShoutWave.Play(origin: CFrame, attackPower: number, shoutConfig: any, r
 		createFlyingWave(origin, color, delayTime, 0.35, endRadius, waveDistance, attackPower)
 	end
 	
+	emitShoutParticles(origin, color, attackDist, shoutConfig)
+end
+
+-- API riêng cho Circular Shout (Shockwave)
+function ShoutWave.PlayCircular(origin: CFrame, attackPower: number, shoutConfig: any, rarityColor: Color3?, powerMult: number?)
+	local pMult = powerMult or 1.0
+	local color = rarityColor or getWaveColor(attackPower)
+	local range = shoutConfig and shoutConfig.Range or 20
+	local attackDist = range * math.pow(pMult, 0.45)
+	local sizeFactor = math.clamp((attackPower * pMult) / 50, 1, 4)
+
+	-- 1. Nổ miệng
+	createMouthBlast(origin, color, attackPower * pMult)
+
+	-- 2. Vòng tròn chấn động tỏa ra (Thay vì Beam)
+	createExpandingRing(origin, color, sizeFactor, 0.4, attackDist)
+	
+	-- 3. Thêm một vòng phụ trễ một chút để trông premium hơn
+	task.delay(0.1, function()
+		createExpandingRing(origin, color, sizeFactor * 0.7, 0.5, attackDist * 1.2)
+	end)
+
+	-- 4. Particles tỏa tròn 360
 	emitShoutParticles(origin, color, attackDist, shoutConfig)
 end
 

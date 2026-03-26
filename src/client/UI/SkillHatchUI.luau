@@ -1,102 +1,73 @@
 --!strict
 -- SkillHatchUI.luau
 -- Client-side: Hiệu ứng mở Skill Scroll 3D premium
--- Tương tự EggHatchUI nhưng dành cho Skill
 
-local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local _Debris = game:GetService("Debris")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Shared = game.ReplicatedStorage:WaitForChild("Shared")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local HatchUI = require(script.Parent:WaitForChild("HatchUI"))
 
 local SkillHatchUI = {}
-local localPlayer = Players.LocalPlayer
-
-local function getPlayerGui(): PlayerGui?
-	if not localPlayer then return nil end
-	return localPlayer:FindFirstChildOfClass("PlayerGui")
-end
 
 local screen: ScreenGui? = nil
 
-local function buildHatchUI(parent: Instance?)
-	local pg = parent or getPlayerGui()
-	if not pg then return end
-	
-	local existing = (pg :: any):FindFirstChild("SkillHatchUI")
-	if existing and existing:IsA("ScreenGui") then
-		screen = existing :: ScreenGui
-		print("ℹ️ [SkillHatchUI] Sử dụng SkillHatchUI hiện có.")
-		return
-	end
-
-	screen = (Instance.new("ScreenGui") :: any) :: ScreenGui
-	if not screen then return end
-	screen.Name = "SkillHatchUI"
-	screen.ResetOnSpawn = false
-	screen.IgnoreGuiInset = true
-	screen.Enabled = false
-	screen.Parent = pg
-
-	local overlay = Instance.new("Frame")
-	overlay.Name = "Overlay"
-	overlay.Size = UDim2.new(1, 0, 1, 0)
-	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	overlay.BackgroundTransparency = 1 -- Start transparent
-	overlay.BorderSizePixel = 0
-	overlay.Parent = screen :: Instance
-end
-
 function SkillHatchUI.Init(overrideParent: Instance?)
-	buildHatchUI(overrideParent)
+	screen = HatchUI.Init("SkillHatchUI", overrideParent)
 end
 
 function SkillHatchUI.PlayHatch(skillName: string, rarity: string)
-	if not screen then buildHatchUI() end
+	if not screen then SkillHatchUI.Init() end
 	if not screen then return end
 	
-	screen.Enabled = true
-	local overlay = (screen :: ScreenGui):FindFirstChild("Overlay") :: Frame
+	local hatchScreen = screen :: ScreenGui
+	hatchScreen.Enabled = true
 	
-	-- Fade in black overlay
+	local overlay = HatchUI.CreateOverlay(hatchScreen)
+	
+	-- Fade in overlay
 	TweenService:Create(overlay, TweenInfo.new(0.5), {BackgroundTransparency = 0.3}):Play()
 	
-	if not screen then return end
+	local vp, cam = HatchUI.CreateViewport(overlay)
+	vp.Size = UDim2.new(0, 400, 0, 400)
+	vp.Position = UDim2.new(0.5, 0, 0.45, 0)
+	vp.AnchorPoint = Vector2.new(0.5, 0.5)
 	
-	-- Create 3D Viewport for the "Scroll" or "Skill Icon"
-	local viewport = Instance.new("ViewportFrame")
-	viewport.Size = UDim2.new(0, 400, 0, 400)
-	viewport.Position = UDim2.new(0.5, 0, 0.45, 0)
-	viewport.AnchorPoint = Vector2.new(0.5, 0.5)
-	viewport.BackgroundTransparency = 1
-	viewport.Parent = screen :: Instance
-	
-	local camera = Instance.new("Camera")
-	camera.FieldOfView = 50
-	viewport.CurrentCamera = camera
-	camera.Parent = viewport :: Instance
-
 	-- For now, use a simple colored block or an icon part to represent the skill
 	local model = Instance.new("Part")
 	model.Size = Vector3.new(2, 3, 0.5)
 	model.Color = Config.Theme.RarityColors[rarity] or Color3.fromRGB(255, 255, 255)
 	model.Material = Enum.Material.Glass
-	model.Parent = viewport
+	model.Parent = vp
 	
-	camera.CFrame = CFrame.new(Vector3.new(0, 0, 6), model.Position)
+	cam.CFrame = CFrame.new(Vector3.new(0, 0, 6), model.Position)
+
+	-- SFX: Shake
+	if Config.Audio and Config.Audio.EggShakeSFX then
+		HatchUI.PlaySFX(Config.Audio.EggShakeSFX, 1.2)
+	end
 
 	-- Animation: Shake and Reveal
-	local startTime = tick()
+	local startTime = os.clock()
 	local conn
-	conn = game:GetService("RunService").RenderStepped:Connect(function()
-		local elapsed = tick() - startTime
+	conn = RunService.RenderStepped:Connect(function()
+		local elapsed = os.clock() - startTime
 		if elapsed < 1.5 then
 			-- Shaking
 			model.CFrame = CFrame.Angles(0, math.rad(elapsed * 360), 0) * CFrame.Angles(math.sin(elapsed * 50) * 0.1, 0, 0)
 		else
 			conn:Disconnect()
-			-- Final Reveal
+			
+			-- Reveal Effects
+			if Config.Audio and Config.Audio.EggFlashSFX then
+				HatchUI.PlaySFX(Config.Audio.EggFlashSFX)
+			end
+			HatchUI.Flash(hatchScreen)
+			HatchUI.EmitConfetti(overlay, 50)
+
+			-- Model Reveal
 			model.Color = Config.Theme.RarityColors[rarity]
 			
 			local title = Instance.new("TextLabel")
@@ -109,7 +80,7 @@ function SkillHatchUI.PlayHatch(skillName: string, rarity: string)
 			title.Font = Enum.Font.GothamBlack
 			title.TextSize = 42
 			title.TextStrokeTransparency = 0.5
-			title.Parent = screen
+			title.Parent = overlay
 			
 			local rarityLabel = Instance.new("TextLabel")
 			rarityLabel.Size = UDim2.new(0, 400, 0, 30)
@@ -120,18 +91,9 @@ function SkillHatchUI.PlayHatch(skillName: string, rarity: string)
 			rarityLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 			rarityLabel.Font = Enum.Font.GothamBold
 			rarityLabel.TextSize = 20
-			rarityLabel.Parent = screen
+			rarityLabel.Parent = overlay
 
-			task.wait(2)
-			-- Cleanup
-			TweenService:Create(overlay, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
-			task.wait(0.5)
-			if screen then
-				screen.Enabled = false
-			end
-			viewport:Destroy()
-			title:Destroy()
-			rarityLabel:Destroy()
+			HatchUI.Cleanup(overlay, hatchScreen, 3.0)
 		end
 	end)
 end

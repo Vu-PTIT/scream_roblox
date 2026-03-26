@@ -11,8 +11,13 @@ local Shared      = game.ReplicatedStorage.Shared
 local Remotes     = require(Shared.Remotes)
 local Config      = require(Shared.Config)
 
+-- Lazy-load packages
+local React          = require(game.ReplicatedStorage.Packages.React)
+local ReactRoblox    = require(game.ReplicatedStorage.Packages.ReactRoblox)
+
 -- Lazy-load UI modules
 local HUD            = require(script.Parent.Parent.UI.HUD)
+local HUDApp         = require(script.Parent.Parent.UI.HUDApp)
 local Shop           = require(script.Parent.Parent.UI.Shop)
 local PetUI          = require(script.Parent.Parent.UI.PetUI)
 local RebirthUI      = require(script.Parent.Parent.UI.RebirthUI)
@@ -282,7 +287,15 @@ end
 -- ============================================================
 function UIController.Init()
 	-- Khởi động tất cả UI modules
-	HUD.Init()
+	-- HUD.Init() -- Legacy HUD disabled in favor of React HUDApp
+	
+	-- Mount React HUD
+	local hudRoot = ReactRoblox.createRoot(PlayerGui)
+	hudRoot:render(React.createElement(HUDApp))
+	
+	-- Disable default Roblox Health UI (moved from legacy HUD)
+	pcall(function() game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Health, false) end)
+
 	Shop.Init()
 	PetUI.Init()
 	RebirthUI.Init()

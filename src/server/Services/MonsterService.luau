@@ -239,8 +239,9 @@ local function dropRewards(cfg: Types.MonsterConfig, position: Vector3, killerPl
 	if math.random() <= cfg.EggDropChance then
 		-- Tặng 1 trứng = roll 1 pet ngay (simplification: có thể làm physical egg sau)
 		Remotes.Events.Notification:FireClient(killerPlayer, Config.Localization.Notifications.EggDropped)
-		-- PetService sẽ handle qua remote, tại đây fire event giả lập
-		Remotes.Events.OpenEgg:FireClient(killerPlayer) -- client tự re-fire lên server với qty=1
+		-- PetService sẽ handle trực tiếp trên server
+		local PetService = require(script.Parent.PetService)
+		PetService.OnOpenEgg(killerPlayer, 1)
 	end
 
 	DataService.UpdateFields(killerPlayer, updates)
@@ -371,9 +372,14 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 							-- Quick lock on
 							hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + shoutDir * Vector3.new(1,0,1))
 							
+							local shoutType = Config.ShoutTypes.Normal
+							if cfg.IsBoss and instance.CurrentHP < cfg.MaxHP * 0.5 then
+								shoutType = Config.ShoutTypes.Circular
+							end
+							
 							task.spawn(function()
 								local ShoutService = require(script.Parent.ShoutService)
-								;(ShoutService :: any).PerformShout(model, cfg.Attack, shoutDir, true, nil)
+								;(ShoutService :: any).PerformShout(model, cfg.Attack, shoutDir, true, nil, nil, shoutType)
 							end)
 						end
 					else

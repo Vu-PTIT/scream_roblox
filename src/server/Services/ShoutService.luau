@@ -163,7 +163,8 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 	end
 
 	if isMonster then
-		Remotes.Events.MonsterShoutVFX:FireAllClients(CFrame.new(hrp.Position, hrp.Position + direction * 100), totalAtk)
+		local sType = shoutTypeConfig and shoutTypeConfig.Id or "Normal"
+		Remotes.Events.MonsterShoutVFX:FireAllClients(CFrame.new(hrp.Position, hrp.Position + direction * 100), totalAtk, sType)
 		
 		if Config.Audio and Config.Audio.ShoutSFX and Config.Audio.ShoutSFX ~= "" then
 			local sound = Instance.new("Sound")
@@ -180,7 +181,7 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 end
 
 local function onShoutFired(caster: Player, direction: Vector3, powerMult: number?, slotIndex: number?)
-	local pMult = math.clamp(powerMult or 1.0, 1.0, 5.0) -- Cap safety
+	-- powerMult sẽ được validate và clamp dựa trên timing bên dưới
 	if not caster.Character then return end
 	if direction.Magnitude < 0.01 then return end
 	direction = direction.Unit
@@ -227,7 +228,19 @@ local function onShoutFired(caster: Player, direction: Vector3, powerMult: numbe
 
 	local now     = os.clock()
 	local lastTime = ShoutCooldowns[caster.UserId .. "_" .. sIndex] or 0
-	if now - lastTime < finalSkillConfig.Cooldown then return end
+	local elapsedSinceLast = now - lastTime
+	if elapsedSinceLast < finalSkillConfig.Cooldown then return end
+	
+	-- [SECURITY] Validate powerMult based on time since last shout
+	local chargeTimePossible = math.max(0, elapsedSinceLast - finalSkillConfig.Cooldown)
+	local maxMultPossible = 1.0
+	for _, lvl in ipairs(Config.Shout.Charge.Levels) do
+		if chargeTimePossible >= (lvl.Time * 0.9) then -- 10% buffer for latency
+			maxMultPossible = lvl.Mult
+		end
+	end
+	
+	local pMult = math.clamp(powerMult or 1.0, 1.0, maxMultPossible)
 	ShoutCooldowns[caster.UserId .. "_" .. sIndex] = now
 
 	local shoutTypeConfig = Config.ShoutTypes[finalSkillConfig.ShoutTypeId] or Config.ShoutTypes.Normal

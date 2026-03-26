@@ -218,8 +218,8 @@ local function onPlayerAdded(player: Player)
 	-- Chờ character (có thể bị delay ở test)
 	task.wait(1)
 
-	-- Gửi full data xuống client
 	Remotes.Events.PlayerDataLoaded:FireClient(player, data :: any)
+	player:SetAttribute("PlayerDataLoaded", true)
 	
 	-- Apply MaxHealth to char
 	local function applyStats(char: Model)

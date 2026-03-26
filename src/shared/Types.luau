@@ -99,6 +99,7 @@ export type MonsterConfig = {
 	GoldDrop: number,
 	EggDropChance: number,  -- 0.0 → 1.0
 	SpawnZone: string,      -- Tên khu vực ("PvEZone1", ...)
+	IsBoss: boolean?,       -- (Nâng cao) Có phải boss không?
 }
 
 -- Config pet template

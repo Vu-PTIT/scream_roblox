@@ -133,8 +133,8 @@ local function onSetSkillEquipped(player: Player, skillId: string, equipped: boo
 		targetSkill.SlotIndex = nil
 	end
 
-	-- Rebuild EquippedSkillIds array (length 2 maximum)
-	local equippedIds: { string } = {}
+	-- Rebuild EquippedSkillIds as a dictionary/map (1..2)
+	local equippedIds: { [number]: string } = {}
 	for _, skill in ipairs(data.Skills) do
 		if skill.Equipped and skill.SlotIndex then
 			equippedIds[skill.SlotIndex] = skill.Id

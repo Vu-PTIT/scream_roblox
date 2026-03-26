@@ -103,8 +103,11 @@ local function renderStatsTab(parent: Instance)
 		valLbl.Parent = row
 	end
 
-	local totalAtk = (data.Attack or 10) + (data.DamageUpgradeLevel or 0) * (Config.Upgrades[1].StatPerLevel or 1)
-	local totalDef = (data.Defense or 10) + (data.ArmorUpgradeLevel or 0) * (Config.Upgrades[3].StatPerLevel or 1)
+	local dmgCfg = Config.GetUpgrade("damage_1")
+	local armCfg = Config.GetUpgrade("armor_1")
+
+	local totalAtk = (data.Attack or 10) + (data.DamageUpgradeLevel or 0) * (dmgCfg and dmgCfg.StatPerLevel or 5)
+	local totalDef = (data.Defense or 10) + (data.ArmorUpgradeLevel or 0) * (armCfg and armCfg.StatPerLevel or 10)
 
 	createStatRow("Cường hóa Sát thương", "Lv. " .. (data.DamageUpgradeLevel or 0), "⚔️", 1)
 	createStatRow("Cường hóa Giáp", "Lv. " .. (data.ArmorUpgradeLevel or 0), "🛡️", 2)

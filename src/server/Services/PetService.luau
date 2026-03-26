@@ -96,6 +96,7 @@ local function onOpenEgg(player: Player, quantity: number)
 	end
 	Remotes.Events.Notification:FireClient(player, string.format(Config.Localization.Notifications.GetPets, table.concat(rarityNames, ", ")))
 end
+PetService.OnOpenEgg = onOpenEgg
 
 -- ============================================================
 -- EQUIP / UNEQUIP PET
@@ -298,7 +299,10 @@ end)
 
 _Players.PlayerAdded:Connect(function(player: Player)
 	player.CharacterAdded:Connect(function(char)
-		task.wait(1) -- Chờ setup Data và HumanoidRootPart xong
+		if not player:GetAttribute("PlayerDataLoaded") then
+			player:GetAttributeChangedSignal("PlayerDataLoaded"):Wait()
+		end
+		char:WaitForChild("HumanoidRootPart", 5)
 		if char and player.Parent then
 			PetService.UpdatePhysicalPets(player)
 		end

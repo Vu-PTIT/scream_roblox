@@ -50,8 +50,8 @@ Config.Shout = {
 	ConeAngle         = 55,    -- độ - góc nửa-cone khi lan sóng
 	VerticalBias      = 0.5,   -- tăng một chút để nảy lên rõ nét thay vì trượt ngang
 	MaxForce          = 45,    -- (Đã giảm thêm) giới hạn vận tốc tối đa để tránh văng bay màu khỏi màn hình
-	VocalPointsPerHit = 1,
-	VocalPointsPerUse = 0.2,
+	VocalPointsPerHit = 5,
+	VocalPointsPerUse = 2.0,
 
 	-- Hệ thống Gồng lực (Power Charge)
 	Charge = {
@@ -134,7 +134,7 @@ Config.Map = {
 		Size     = Vector3.new(150, 1, 150),
 	},
 	SkillStation = {
-		Position = Vector3.new(0, 2, -25), -- Opposite of Rebirth station
+		Offset = Vector3.new(0, 2, -25), -- Opposite of Rebirth station
 		Size     = Vector3.new(6, 4, 6),
 	}
 }
@@ -173,7 +173,7 @@ local upgradesData: { Types.UpgradeConfig } = {
 		Id          = "damage_1",
 		DisplayName = "Sonic Power",
 		Category    = "Attack",
-		BaseCost    = 50,
+		BaseCost    = 150,
 		CostScaling = 1.5,
 		StatPerLevel = 5,
 		MaxLevel    = 100,
@@ -201,6 +201,16 @@ local upgradesData: { Types.UpgradeConfig } = {
 	},
 }
 Config.Upgrades = upgradesData
+
+-- Helper to find upgrade by ID
+function Config.GetUpgrade(id: string): Types.UpgradeConfig?
+	for _, upgrade in ipairs(Config.Upgrades) do
+		if upgrade.Id == id then
+			return upgrade
+		end
+	end
+	return nil
+end
 
 -- ============================================================
 -- REBIRTH
@@ -401,6 +411,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop       = 1000,
 		EggDropChance  = 0.80,
 		SpawnZone      = "BossRoom",
+		IsBoss         = true,
 	},
 	{
 		Id             = "IceColossus",
@@ -412,6 +423,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop       = 3000,
 		EggDropChance  = 0.90,
 		SpawnZone      = "IceBossRoom",
+		IsBoss         = true,
 	},
 }
 Config.Monsters = monstersData
@@ -454,12 +466,12 @@ Config.Quests = {
 
 Config.MonetizationProducts = {
 	Gamepasses = {
-		{ Id = 12345678, Name = "Auto Train", Price = 150, Icon = "rbxassetid://5905055047", Type = "Gamepass" }, -- TODO: Thay Gamepass ID thật (Auto Train)
-		{ Id = 87654321, Name = "VIP (x2 Stats)", Price = 399, Icon = "rbxassetid://8050965706", Type = "Gamepass" }, -- TODO: Thay Gamepass ID thật (VIP)
+		{ Id = 189283745, Name = "Auto Train", Price = 150, Icon = "rbxassetid://5905055047", Type = "Gamepass" }, -- TODO: Thay Gamepass ID thật (Auto Train)
+		{ Id = 271828182, Name = "VIP (x2 Stats)", Price = 399, Icon = "rbxassetid://8050965706", Type = "Gamepass" }, -- TODO: Thay Gamepass ID thật (VIP)
 	},
 	DevProducts = {
-		{ Id = 10000001, Name = "+1,000 Gold", Price = 50, Icon = "rbxassetid://2703816766", Type = "DevProduct" }, -- TODO: Thay DevProduct ID thật (Gold gói nhỏ)
-		{ Id = 10000002, Name = "+5,000 Gold", Price = 200, Icon = "rbxassetid://2703816766", Type = "DevProduct" }, -- TODO: Thay DevProduct ID thật (Gold gói lớn)
+		{ Id = 987654321, Name = "+1,000 Gold", Price = 50, Icon = "rbxassetid://2703816766", Type = "DevProduct" }, -- TODO: Thay DevProduct ID thật (Gold gói nhỏ)
+		{ Id = 987654322, Name = "+5,000 Gold", Price = 200, Icon = "rbxassetid://2703816766", Type = "DevProduct" }, -- TODO: Thay DevProduct ID thật (Gold gói lớn)
 	}
 }
 

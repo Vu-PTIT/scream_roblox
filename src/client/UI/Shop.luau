@@ -246,7 +246,7 @@ local function createUpgradeCard(parent: Instance, cfg: any, index: number): Fra
 	costLabel.Size         = UDim2.new(0, 100, 0, 18)
 	costLabel.Position     = UDim2.new(1, -125, 0, 38)
 	costLabel.BackgroundTransparency = 1
-	costLabel.Text         = "Cost: 0 Gold"
+	costLabel.Text         = "Cost: 0 VP"
 	costLabel.TextColor3   = Color3.fromRGB(255, 210, 50)
 	costLabel.Font         = Enum.Font.Gotham
 	costLabel.TextSize     = 13
@@ -342,7 +342,7 @@ local function createUpgradeCard(parent: Instance, cfg: any, index: number): Fra
 
 		levelLabel.Text = string.format("Level: %d / %d", currentLevel, cfg.MaxLevel)
 		local cost      = getCost(cfg, currentLevel)
-		costLabel.Text  = string.format("Cost: %s Gold", tostring(cost))
+		costLabel.Text  = string.format(Config.Localization.Shop.CostFormat, tostring(cost))
 		
 		local mathLevel = math.clamp(currentLevel, 0, cfg.MaxLevel)
 		local fillRatio = mathLevel / cfg.MaxLevel

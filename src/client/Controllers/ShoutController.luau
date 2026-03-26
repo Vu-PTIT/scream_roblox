@@ -20,7 +20,13 @@ task.defer(function()
 	DataController = require(script.Parent.DataController)
 end)
 
-local ShoutController = {}
+local ShoutController = {} :: {
+	PerformShout: (slotIndex: number, overrideDirection: Vector3?, powerMult: number?) -> (),
+	GetCooldownData: (slotIndex: number) -> (number, number),
+	GetChargingSlot: () -> number?,
+	GetSelectedSlot: () -> number,
+	SetSelectedSlot: (slot: number) -> (),
+}
 
 local LocalPlayer   = Players.LocalPlayer
 local Camera        = workspace.CurrentCamera
@@ -68,6 +74,9 @@ local shoutBillboard: BillboardGui? = nil
 local function createShoutBillboard(character: Model): BillboardGui
 	local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not hrp then error("No HRP") end
+
+	local existing = hrp:FindFirstChild("ShoutBillboard")
+	if existing then existing:Destroy() end
 
 	local gui          = Instance.new("BillboardGui")
 	gui.Name           = "ShoutBillboard"
@@ -324,7 +333,11 @@ local function performShout(slotIndex: number, overrideDirection: Vector3?, powe
 	local baseSkillPower = attackPower * skillConfig.DamageMult
 	local rarityColor = Config.Theme.RarityColors and Config.Theme.RarityColors[skillConfig.Rarity]
 	
-	ShoutWave.Play(originCFrame, baseSkillPower, shoutConfig, rarityColor, pMult)
+	if shoutConfig.Id == "Circular" then
+		ShoutWave.PlayCircular(originCFrame, baseSkillPower, shoutConfig, rarityColor, pMult)
+	else
+		ShoutWave.Play(originCFrame, baseSkillPower, shoutConfig, rarityColor, pMult)
+	end
 
 	local shoutText = "AAAAHHH!!!"
 	if pMult >= 3 then
@@ -552,12 +565,22 @@ end
 
 ShoutController.PerformShout = performShout
 
-Remotes.Events.MonsterShoutVFX.OnClientEvent:Connect(function(originCFrame: CFrame, attackPower: number)
-	ShoutWave.Play(originCFrame, attackPower)
+Remotes.Events.MonsterShoutVFX.OnClientEvent:Connect(function(originCFrame: CFrame, attackPower: number, shoutTypeId: string?)
+	local sType = shoutTypeId or "Normal"
+	local shoutConfig = Config.ShoutTypes[sType] or Config.ShoutTypes.Normal
+	
+	if sType == "Circular" then
+		ShoutWave.PlayCircular(originCFrame, attackPower, shoutConfig)
+	else
+		ShoutWave.Play(originCFrame, attackPower, shoutConfig)
+	end
 end)
 
 local function onCharAdded(character: Model)
-	shoutBillboard = nil
+	if shoutBillboard then
+		shoutBillboard:Destroy()
+		shoutBillboard = nil
+	end
 end
 LocalPlayer.CharacterAdded:Connect(onCharAdded)
 
