@@ -9,6 +9,7 @@ local Debris = game:GetService("Debris")
 local Shared = game.ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local ShoutController = require(script.Parent.ShoutController)
+local AnimationController = require(script.Parent:WaitForChild("AnimationController")) :: any
 
 local DashController = {}
 
@@ -17,42 +18,24 @@ local lastDashTime = 0
 
 local function performDash()
 	local now = os.clock()
-	if now - lastDashTime < Config.Dash.Cooldown then return end
-
-	local character = LocalPlayer.Character
-	if not character then return end
-
-	local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	local humanoid = character:FindFirstChild("Humanoid") :: Humanoid?
-	if not hrp or not humanoid then return end
-	if humanoid.Health <= 0 then return end
-
-	lastDashTime = now
-
-	-- Hướng lướt: Ưu tiên hướng đang di chuyển, nếu đứng yên thì lướt tới trước
-	local direction = humanoid.MoveDirection
-	if direction.Magnitude < 0.1 then
-		direction = hrp.CFrame.LookVector
-	else
-		direction = direction.Unit
+	if now - lastDashTime < Config.Dash.Cooldown then
+		return
 	end
 
-	-- Tránh lướt theo phương Y lên trời/xuống đất
-	direction = Vector3.new(direction.X, 0, direction.Z).Unit
+	local character = LocalPlayer.Character
+	if not character then
+		return
+	end
 
-	-- Tạo Attachment cho LinearVelocity
-	local attachment = Instance.new("Attachment")
-	attachment.Name = "DashAttachment"
-	attachment.Parent = hrp
+	local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then
+		return
+	end
 
-	local lv = Instance.new("LinearVelocity")
-	lv.Name = "DashVelocity"
-	lv.Attachment0 = attachment
-	-- Cần giới hạn MaxForce để không bị physics glitch, dùng math.huge có thể lỗi ở một số trường hợp, nên dùng số lớn
-	lv.MaxForce = 100000 
-	lv.VectorVelocity = direction * Config.Dash.ForceMultiplier
-	lv.RelativeTo = Enum.ActuatorRelativeTo.World
-	lv.Parent = hrp
+	lastDashTime = now
+	
+	-- Phát Animation lướt
+	AnimationController.Play("Dash")
 
 	-- Sound Effect: Tiếng vút gió khi lướt (DashSFX từ Config)
 	if Config.Audio and Config.Audio.DashSFX and Config.Audio.DashSFX ~= "" then
@@ -66,9 +49,22 @@ local function performDash()
 		Debris:AddItem(sound, 2)
 	end
 
-	-- Tự hủy LinearVelocity sau Duration
-	Debris:AddItem(lv, Config.Dash.Duration)
-	Debris:AddItem(attachment, Config.Dash.Duration)
+	-- Hướng lướt: Ưu tiên hướng di chuyển, nếu đứng yên thì lướt tới trước
+	local direction = hrp.CFrame.LookVector
+	local humanoid = character:FindFirstChild("Humanoid") :: Humanoid?
+	if humanoid and humanoid.MoveDirection.Magnitude > 0.1 then
+		direction = humanoid.MoveDirection.Unit
+	end
+
+	-- Apply Movement Force (Dash)
+	local dashVelocity = Instance.new("BodyVelocity")
+	dashVelocity.Name = "DashForce"
+	dashVelocity.MaxForce = Vector3.new(1, 1, 1) * 500000 -- Đủ mạnh để thắng ma sát
+	dashVelocity.Velocity = direction * Config.Dash.ForceMultiplier
+	dashVelocity.Parent = hrp
+	
+	-- Xóa lực lướt sau thời gian chỉ định trong Config
+	Debris:AddItem(dashVelocity, Config.Dash.Duration)
 
 	-- Gọi hàm hét (Shout) cùng lúc khi lướt, bắn sóng thẳng ra sau lưng
 	task.spawn(function()
@@ -80,7 +76,9 @@ end
 
 -- Lắng nghe phím
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
+	if gameProcessed then
+		return
+	end
 	if input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.LeftShift then
 		performDash()
 	end

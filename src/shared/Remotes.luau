@@ -114,6 +114,9 @@ local Remotes = {
 	-- [Client → Server] Yêu cầu nhận phần thưởng Quest
 	-- Payload: questId: string
 	ClaimQuestReward = Event("ClaimQuestReward"),
+
+	-- [Shared] Refx VFX System
+	RefxSignal = Event("RefxSignal"),
 }
 
 -- ============================================================

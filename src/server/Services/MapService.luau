@@ -3,9 +3,16 @@
 -- Server-side: Tự động khởi tạo Bản đồ (Safe Zone, PvP) và quản lý logic khu vực
 
 local MapService = {}
-local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 local Shared = game.ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local ZoneTypes = require(Shared:WaitForChild("ZoneTypes"))
+local ZonePlus = require(game.ReplicatedStorage:WaitForChild("Packages"):WaitForChild("ZonePlus"))
+
+local DataService: any = nil
+task.defer(function()
+	DataService = require(script.Parent.DataService)
+end)
 
 -- Tạo part an toàn
 local function createSafeZone()
@@ -26,7 +33,7 @@ local function createSafeZone()
 	local szConfig = Config.Map.SafeZone
 	local part: Part
 	local existing = safeZonesFolder:FindFirstChild("SafeZoneBase")
-	
+
 	if existing and existing:IsA("Part") then
 		part = existing
 		print("ℹ️ [MapService] Sử dụng SafeZoneBase hiện có trong Studio.")
@@ -41,6 +48,8 @@ local function createSafeZone()
 		part.TopSurface = Enum.SurfaceType.Smooth
 		part.Parent = safeZonesFolder
 	end
+
+	CollectionService:AddTag(part, ZoneTypes.Tags.Safezone)
 
 	-- Thêm SpawnLocation nếu chưa có
 	if not mapFolder:FindFirstChildOfClass("SpawnLocation") then
@@ -99,7 +108,7 @@ local function createZone(zoneName: string, config: any, color: Color3, material
 
 	local part: Part
 	local existing = zoneFolder:FindFirstChild("Base")
-	
+
 	if existing and existing:IsA("Part") then
 		part = existing
 	else
@@ -113,6 +122,9 @@ local function createZone(zoneName: string, config: any, color: Color3, material
 		part.TopSurface = Enum.SurfaceType.Smooth
 		part.Parent = zoneFolder
 	end
+
+	-- You can add specific tags here for monster zones if needed
+	-- CollectionService:AddTag(part, "MonsterZone")
 
 	-- Thêm SpawnPoint cho Quái nếu chưa có
 	if not zoneFolder:FindFirstChild("SpawnPoint") then
@@ -131,7 +143,9 @@ end
 -- Tạo các khu vực Rebirth
 local function createRebirthAreas()
 	local mapFolder = workspace:FindFirstChild("Map")
-	if not mapFolder then return end
+	if not mapFolder then
+		return
+	end
 	local rebirthZonesFolder = mapFolder:FindFirstChild("RebirthZones")
 	if not rebirthZonesFolder then
 		rebirthZonesFolder = Instance.new("Folder")
@@ -139,38 +153,39 @@ local function createRebirthAreas()
 		rebirthZonesFolder.Parent = mapFolder
 	end
 
-	local areas = {
-		{ 
-			Name = "Desert", 
-			Req = 1, 
-			Color = Color3.fromRGB(244, 164, 96), 
+	local areas: { any } = {
+		{
+			Name = "Desert",
+			Req = 1,
+			Color = Color3.fromRGB(244, 164, 96),
 			Pos = Vector3.new(0, 0, -200),
 			Material = Enum.Material.Sand,
-			VFX = "Desert"
+			VFX = "Desert",
+			MusicId = "rbxassetid://1837618405", -- Example action music
 		},
-		{ 
-			Name = "IceZone", 
-			Req = 3, 
-			Color = Color3.fromRGB(173, 216, 230), 
+		{
+			Name = "IceZone",
+			Req = 3,
+			Color = Color3.fromRGB(173, 216, 230),
 			Pos = Vector3.new(0, 0, -400),
 			Material = Enum.Material.Ice,
-			VFX = "Snow"
+			VFX = "Snow",
 		},
-		{ 
-			Name = "VoidRealm", 
-			Req = 7, 
-			Color = Color3.fromRGB(30, 0, 50), 
+		{
+			Name = "VoidRealm",
+			Req = 7,
+			Color = Color3.fromRGB(30, 0, 50),
 			Pos = Vector3.new(0, 0, -600),
 			Material = Enum.Material.CorrodedMetal,
-			VFX = "Void"
+			VFX = "Void",
 		},
-		{ 
-			Name = "HeavenlyStage", 
-			Req = 15, 
-			Color = Color3.fromRGB(255, 255, 230), 
+		{
+			Name = "HeavenlyStage",
+			Req = 15,
+			Color = Color3.fromRGB(255, 255, 230),
 			Pos = Vector3.new(0, 0, -800),
 			Material = Enum.Material.Neon,
-			VFX = "Divine"
+			VFX = "Divine",
 		},
 	}
 
@@ -183,7 +198,7 @@ local function createRebirthAreas()
 			emitter.Size = NumberSequence.new({
 				NumberSequenceKeypoint.new(0, 0),
 				NumberSequenceKeypoint.new(0.5, 2),
-				NumberSequenceKeypoint.new(1, 0)
+				NumberSequenceKeypoint.new(1, 0),
 			})
 			emitter.Transparency = NumberSequence.new(0.6)
 			emitter.Lifetime = NumberRange.new(2, 4)
@@ -206,7 +221,7 @@ local function createRebirthAreas()
 			emitter.SpreadAngle = Vector2.new(180, 180)
 			-- Cho xuất hiện ngẫu nhiên bên trên zone
 			emitter.Parent = base
-			
+
 			-- Thêm chút sương mù cục bộ (Fog part)
 			local fogPart = Instance.new("Part")
 			fogPart.Name = "LocalFog"
@@ -223,16 +238,16 @@ local function createRebirthAreas()
 			emitter.Name = "VoidSmoke"
 			emitter.Color = ColorSequence.new({
 				ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 0, 100))
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 0, 100)),
 			})
 			emitter.Size = NumberSequence.new({
 				NumberSequenceKeypoint.new(0, 2),
-				NumberSequenceKeypoint.new(1, 10)
+				NumberSequenceKeypoint.new(1, 10),
 			})
 			emitter.Transparency = NumberSequence.new({
 				NumberSequenceKeypoint.new(0, 0.4),
 				NumberSequenceKeypoint.new(0.8, 0.8),
-				NumberSequenceKeypoint.new(1, 1)
+				NumberSequenceKeypoint.new(1, 1),
 			})
 			emitter.Lifetime = NumberRange.new(3, 6)
 			emitter.Rate = 15
@@ -248,7 +263,7 @@ local function createRebirthAreas()
 				NumberSequenceKeypoint.new(0, 0),
 				NumberSequenceKeypoint.new(0.2, 1),
 				NumberSequenceKeypoint.new(0.8, 1),
-				NumberSequenceKeypoint.new(1, 0)
+				NumberSequenceKeypoint.new(1, 0),
 			})
 			emitter.Lifetime = NumberRange.new(1, 3)
 			emitter.Rate = 50
@@ -281,6 +296,12 @@ local function createRebirthAreas()
 		if area.VFX then
 			applyAreaVFX(floor, area.VFX)
 		end
+		
+		-- Integration: Add MusicZone tag and MusicId attribute
+		if (area :: any).MusicId then
+			floor:SetAttribute("MusicId", (area :: any).MusicId)
+			CollectionService:AddTag(floor, ZoneTypes.Tags.MusicZone)
+		end
 
 		local blocker = Instance.new("Part")
 		blocker.Name = area.Name .. "_Gate"
@@ -301,7 +322,7 @@ local function createRebirthAreas()
 		txt.BackgroundTransparency = 1
 		txt.Text = area.Name .. "\nRequires " .. area.Req .. " Rebirths"
 		txt.TextScaled = true
-		txt.TextColor3 = Color3.new(1,1,1)
+		txt.TextColor3 = Color3.new(1, 1, 1)
 		txt.Font = Enum.Font.GothamBold
 		txt.Parent = gui
 
@@ -312,48 +333,54 @@ local function createRebirthAreas()
 			MaxZ = blocker.Position.Z + 2,
 			MinX = blocker.Position.X - (blocker.Size.X / 2),
 			MaxX = blocker.Position.X + (blocker.Size.X / 2),
-			PushBackTarget = blocker.Position + Vector3.new(0, 0, 15) -- 15 studs before the gate
+			PushBackTarget = blocker.Position + Vector3.new(0, 0, 15), -- 15 studs before the gate
 		})
 	end
 
-	if RunService:IsRunning() then
-		local DataService = require(script.Parent.DataService)
-		local Remotes = game.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
-		
-		RunService.Heartbeat:Connect(function()
-			for _, player in ipairs(game.Players:GetPlayers()) do
+	-- Setup ZonePlus for Rebirth Gates
+	for _, gate in ipairs(blockedGates) do
+		local zonePart = rebirthZonesFolder:FindFirstChild(gate.Name .. "_Gate") :: BasePart?
+		if zonePart then
+			-- Create a volume for the restricted area (extending into the zone)
+			local triggerPart = Instance.new("Part")
+			triggerPart.Name = gate.Name .. "_Trigger"
+			triggerPart.Anchored = true
+			triggerPart.CanCollide = false
+			triggerPart.Transparency = 1
+			-- Size covers the whole Z-range of the restricted zone
+			triggerPart.Size = Vector3.new(gate.MaxX - gate.MinX, 20, gate.MaxZ - gate.MinZ)
+			triggerPart.Position = Vector3.new((gate.MinX + gate.MaxX) / 2, 10, (gate.MinZ + gate.MaxZ) / 2)
+			triggerPart.Parent = rebirthZonesFolder
+
+			local zone = ZonePlus.new(triggerPart)
+			zone.playerEntered:Connect(function(player)
 				local char = player.Character
 				local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-				if not hrp then continue end
+				if not hrp then return end
 
-				local pos = hrp.Position
-				for _, gate in ipairs(blockedGates) do
-					-- Kiểm tra bounding box của khu vực bị khóa
-					if pos.Z < gate.MaxZ and pos.Z > gate.MinZ and pos.X < gate.MaxX and pos.X > gate.MinX then
-						-- Load data kiểm tra
-						local ok, data = pcall(function() return DataService.GetData(player) end)
-						if ok and data and data.RebirthCount < gate.Req then
-							-- Hoàn trả vị trí nhưng giữ nguyên góc xoay của người chơi
-							hrp.CFrame = CFrame.new(gate.PushBackTarget.X, hrp.Position.Y, gate.PushBackTarget.Z) * hrp.CFrame.Rotation
-							
-							-- Tránh spam notification
-							local lastNotif = player:GetAttribute("LastRebirthNotif_" .. gate.Name) or 0
-							if os.clock() - lastNotif > 2 then
-								player:SetAttribute("LastRebirthNotif_" .. gate.Name, os.clock())
-								Remotes.Events.Notification:FireClient(player, "❌ Cần " .. gate.Req .. " Rebirth để vào khu vực " .. gate.Name .. "!")
-							end
-						end
+				local data = DataService.GetData(player)
+				if data and data.RebirthCount < gate.Req then
+					-- Kick back
+					hrp.CFrame = CFrame.new(gate.PushBackTarget.X, hrp.Position.Y, gate.PushBackTarget.Z) * hrp.CFrame.Rotation
+					
+					local lastNotif = player:GetAttribute("LastRebirthNotif_" .. gate.Name) or 0
+					if os.clock() - lastNotif > 2 then
+						player:SetAttribute("LastRebirthNotif_" .. gate.Name, os.clock())
+						local Remotes = game.ReplicatedStorage.Shared.Remotes
+						Remotes.Events.Notification:FireClient(player, "❌ Cần " .. gate.Req .. " Rebirth để vào khu vực " .. gate.Name .. "!")
 					end
 				end
-			end
-		end)
+			end)
+		end
 	end
 end
 
 -- Tạo các khu vực Boss Gates
 local function createBossRoomGates()
 	local mapFolder = workspace:FindFirstChild("Map")
-	if not mapFolder then return end
+	if not mapFolder then
+		return
+	end
 	local gatesFolder = mapFolder:FindFirstChild("BossGates")
 	if not gatesFolder then
 		gatesFolder = Instance.new("Folder")
@@ -362,8 +389,20 @@ local function createBossRoomGates()
 	end
 
 	local bossAreas = {
-		{ Name = "BossRoom", Req = 1, Pos = Vector3.new(-200, 0, 0), Size = Vector3.new(150, 1, 150), Dir = Vector3.new(1, 0, 0) },
-		{ Name = "IceBossRoom", Req = 5, Pos = Vector3.new(-400, 0, 0), Size = Vector3.new(150, 1, 150), Dir = Vector3.new(1, 0, 0) },
+		{
+			Name = "BossRoom",
+			Req = 1,
+			Pos = Vector3.new(-200, 0, 0),
+			Size = Vector3.new(150, 1, 150),
+			Dir = Vector3.new(1, 0, 0),
+		},
+		{
+			Name = "IceBossRoom",
+			Req = 5,
+			Pos = Vector3.new(-400, 0, 0),
+			Size = Vector3.new(150, 1, 150),
+			Dir = Vector3.new(1, 0, 0),
+		},
 	}
 
 	local blockedGates = {}
@@ -372,7 +411,7 @@ local function createBossRoomGates()
 		local blocker = Instance.new("Part")
 		blocker.Name = area.Name .. "_Gate"
 		blocker.Size = Vector3.new(5, 20, area.Size.Z) -- Tường chắn song song trục Z
-		blocker.Position = area.Pos + Vector3.new(area.Size.X/2, 10, 0) -- Nằm rìa bên phải của zone
+		blocker.Position = area.Pos + Vector3.new(area.Size.X / 2, 10, 0) -- Nằm rìa bên phải của zone
 		blocker.Anchored = true
 		blocker.CanCollide = false
 		blocker.Transparency = 0.5
@@ -388,7 +427,7 @@ local function createBossRoomGates()
 		txt.BackgroundTransparency = 1
 		txt.Text = "Requires " .. area.Req .. " Rebirths"
 		txt.TextScaled = true
-		txt.TextColor3 = Color3.new(1,1,1)
+		txt.TextColor3 = Color3.new(1, 1, 1)
 		txt.Font = Enum.Font.GothamBold
 		txt.Parent = gui
 
@@ -396,47 +435,55 @@ local function createBossRoomGates()
 			Req = area.Req,
 			Name = area.Name,
 			-- Vùng bị cấm: Kéo từ vị trí trung tâm boss room đến rìa phải trừ hao
-			MinX = area.Pos.X - (area.Size.X/2),
+			MinX = area.Pos.X - (area.Size.X / 2),
 			MaxX = blocker.Position.X + 2,
-			MinZ = area.Pos.Z - (area.Size.Z/2),
-			MaxZ = area.Pos.Z + (area.Size.Z/2),
-			PushBackTarget = blocker.Position + Vector3.new(15, 0, 0) -- 15 studs dội ngược lại
+			MinZ = area.Pos.Z - (area.Size.Z / 2),
+			MaxZ = area.Pos.Z + (area.Size.Z / 2),
+			PushBackTarget = blocker.Position + Vector3.new(15, 0, 0), -- 15 studs dội ngược lại
 		})
 	end
 
-	if RunService:IsRunning() then
-		local DataService = require(script.Parent.DataService)
-		local Remotes = game.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
-		
-		RunService.Heartbeat:Connect(function()
-			for _, player in ipairs(game.Players:GetPlayers()) do
+	-- Setup ZonePlus for Boss Gates
+	for _, gate in ipairs(blockedGates) do
+		local zonePart = gatesFolder:FindFirstChild(gate.Name .. "_Gate") :: BasePart?
+		if zonePart then
+			local triggerPart = Instance.new("Part")
+			triggerPart.Name = gate.Name .. "_Trigger"
+			triggerPart.Anchored = true
+			triggerPart.CanCollide = false
+			triggerPart.Transparency = 1
+			triggerPart.Size = Vector3.new(gate.MaxX - gate.MinX, 20, gate.MaxZ - gate.MinZ)
+			triggerPart.Position = Vector3.new((gate.MinX + gate.MaxX) / 2, 10, (gate.MinZ + gate.MaxZ) / 2)
+			triggerPart.Parent = gatesFolder
+
+			local zone = ZonePlus.new(triggerPart)
+			zone.playerEntered:Connect(function(player)
 				local char = player.Character
 				local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-				if not hrp then continue end
+				if not hrp then return end
 
-				local pos = hrp.Position
-				for _, gate in ipairs(blockedGates) do
-					if pos.X < gate.MaxX and pos.X > gate.MinX and pos.Z < gate.MaxZ and pos.Z > gate.MinZ then
-						local ok, data = pcall(function() return DataService.GetData(player) end)
-						if ok and data and data.RebirthCount < gate.Req then
-							hrp.CFrame = CFrame.new(gate.PushBackTarget.X, hrp.Position.Y, gate.PushBackTarget.Z) * hrp.CFrame.Rotation
-							local lastNotif = player:GetAttribute("LastRebirthNotif_" .. gate.Name) or 0
-							if os.clock() - lastNotif > 2 then
-								player:SetAttribute("LastRebirthNotif_" .. gate.Name, os.clock())
-								Remotes.Events.Notification:FireClient(player, "❌ Cần " .. gate.Req .. " Rebirth để vào khu vực " .. gate.Name .. "!")
-							end
-						end
+				local data = DataService.GetData(player)
+				if data and data.RebirthCount < gate.Req then
+					hrp.CFrame = CFrame.new(gate.PushBackTarget.X, hrp.Position.Y, gate.PushBackTarget.Z) * hrp.CFrame.Rotation
+					
+					local lastNotif = player:GetAttribute("LastRebirthNotif_" .. gate.Name) or 0
+					if os.clock() - lastNotif > 2 then
+						player:SetAttribute("LastRebirthNotif_" .. gate.Name, os.clock())
+						local Remotes = game.ReplicatedStorage.Shared.Remotes
+						Remotes.Events.Notification:FireClient(player, "❌ Cần " .. gate.Req .. " Rebirth để vào khu vực " .. gate.Name .. "!")
 					end
 				end
-			end
-		end)
+			end)
+		end
 	end
 end
 
 -- Tạo các trạm chức năng (Nâng cấp, Pet, Rebirth)
 local function createStations()
 	local mapFolder = workspace:FindFirstChild("Map")
-	if not mapFolder then return end
+	if not mapFolder then
+		return
+	end
 
 	local stationsFolder = mapFolder:FindFirstChild("Stations")
 	if not stationsFolder then
@@ -447,14 +494,54 @@ local function createStations()
 
 	-- Cấu hình trạm
 	local stationData = {
-		{ id = "Shop", name = "Upgrade Station", color = Color3.fromRGB(50, 150, 255), posOffset = Vector3.new(20, 2, -15) },
-		{ id = "Pet", name = "Pet Station", color = Color3.fromRGB(255, 200, 50), posOffset = Vector3.new(-20, 2, -15) },
-		{ id = "Rebirth", name = "Rebirth Station", color = Color3.fromRGB(150, 50, 200), posOffset = Vector3.new(0, 2, 25) },
-		{ id = "Skill", name = "Skill Scroll Gacha", color = Color3.fromRGB(180, 100, 255), posOffset = Config.Map.SkillStation.Offset },
-		{ id = "Inventory", name = "My Inventory (Bag)", color = Color3.fromRGB(0, 255, 255), posOffset = Vector3.new(0, 2, -15) },
-		{ id = "Quest", name = "Quest Board", color = Color3.fromRGB(100, 255, 150), posOffset = Vector3.new(-25, 2, 20) },
-		{ id = "Reward", name = "Reward Chest", color = Color3.fromRGB(255, 100, 255), posOffset = Vector3.new(25, 2, 20) },
-		{ id = "Shout", name = "Speech Customizer", color = Color3.fromRGB(100, 100, 100), posOffset = Vector3.new(0, 2, -30) },
+		{
+			id = "Shop",
+			name = "Upgrade Station",
+			color = Color3.fromRGB(50, 150, 255),
+			posOffset = Vector3.new(20, 2, -15),
+		},
+		{
+			id = "Pet",
+			name = "Pet Station",
+			color = Color3.fromRGB(255, 200, 50),
+			posOffset = Vector3.new(-20, 2, -15),
+		},
+		{
+			id = "Rebirth",
+			name = "Rebirth Station",
+			color = Color3.fromRGB(150, 50, 200),
+			posOffset = Vector3.new(0, 2, 25),
+		},
+		{
+			id = "Skill",
+			name = "Skill Scroll Gacha",
+			color = Color3.fromRGB(180, 100, 255),
+			posOffset = Config.Map.SkillStation.Offset,
+		},
+		{
+			id = "Inventory",
+			name = "My Inventory (Bag)",
+			color = Color3.fromRGB(0, 255, 255),
+			posOffset = Vector3.new(0, 2, -15),
+		},
+		{
+			id = "Quest",
+			name = "Quest Board",
+			color = Color3.fromRGB(100, 255, 150),
+			posOffset = Vector3.new(-25, 2, 20),
+		},
+		{
+			id = "Reward",
+			name = "Reward Chest",
+			color = Color3.fromRGB(255, 100, 255),
+			posOffset = Vector3.new(25, 2, 20),
+		},
+		{
+			id = "Shout",
+			name = "Speech Customizer",
+			color = Color3.fromRGB(100, 100, 100),
+			posOffset = Vector3.new(0, 2, -30),
+		},
 	}
 
 	-- Tìm SafeZoneBase để lấy toạ độ gốc (nếu không có thì lấy 0,0,0)
@@ -470,7 +557,7 @@ local function createStations()
 	for _, data in ipairs(stationData) do
 		local part: Part
 		local existing = stationsFolder:FindFirstChild(data.name)
-		
+
 		if existing and existing:IsA("Part") then
 			part = existing
 		else
@@ -489,7 +576,7 @@ local function createStations()
 		local prompt = (part:FindFirstChild("Prompt_" .. data.id) or Instance.new("ProximityPrompt")) :: ProximityPrompt
 		prompt.Name = "Prompt_" .. data.id
 		prompt.Parent = part
-		
+
 		prompt.ActionText = "Open"
 		prompt.ObjectText = data.name
 		prompt.KeyboardKeyCode = Enum.KeyCode.E
@@ -510,11 +597,13 @@ end
 -- Bảng xếp hạng Global
 local function createLeaderboardBoard()
 	local mapFolder = workspace:FindFirstChild("Map")
-	if not mapFolder then return end
-	
+	if not mapFolder then
+		return
+	end
+
 	local board: Part
 	local existingBoard = mapFolder:FindFirstChild("GlobalLeaderboardBoard")
-	
+
 	if existingBoard and existingBoard:IsA("Part") then
 		board = existingBoard
 	else
@@ -569,38 +658,72 @@ function MapService.Init()
 	if Config.Map.StarterZone then
 		createZone("StarterZone", Config.Map.StarterZone, Color3.fromRGB(180, 255, 180), Enum.Material.Grass)
 	end
-	
+
 	if Config.Map.PvEZone then
 		createZone("PvEZone", Config.Map.PvEZone, Color3.fromRGB(150, 200, 100), Enum.Material.Grass)
 	end
-	
+
 	if Config.Map.BossRoom then
 		createZone("BossRoom", Config.Map.BossRoom, Color3.fromRGB(80, 80, 80), Enum.Material.Slate)
 	end
-	
+
 	if Config.Map.IceBossRoom then
 		createZone("IceBossRoom", Config.Map.IceBossRoom, Color3.fromRGB(173, 216, 230), Enum.Material.Ice)
 	end
-	
+
 	createRebirthAreas()
 	createBossRoomGates()
 	createStations()
 	createLeaderboardBoard()
 
-	print("✅ [MapService] Đã tạo toàn bộ Map cơ bản (SafeZone, PvP Arena, PvEZone, BossRoom, Rebirths, Stations)!")
+	-- StreamingEnabled is configured in default.project.json (Rojo)
+	-- It cannot be set from a regular script at runtime (lacking Plugin capability)
+
+	-- Manage ReplicationFocus for smooth map loading
+	local function onCharacterAdded(player: Player, character: Model)
+		local hrp = character:WaitForChild("HumanoidRootPart", 10) :: BasePart?
+		if hrp then
+			player.ReplicationFocus = hrp
+		end
+	end
+
+	local function onPlayerAdded(player: Player)
+		if player.Character then
+			onCharacterAdded(player, player.Character)
+		end
+		player.CharacterAdded:Connect(function(character)
+			onCharacterAdded(player, character)
+		end)
+	end
+
+	local Players = game:GetService("Players")
+	Players.PlayerAdded:Connect(onPlayerAdded)
+	for _, player in ipairs(Players:GetPlayers()) do
+		task.spawn(onPlayerAdded, player)
+	end
+
+	print(
+		"✅ [MapService] Đã tạo toàn bộ Map cơ bản và cấu hình StreamingEnabled!"
+	)
 end
 
 -- Hàm kiểm tra xem 1 vị trí (thường là HRP) có đang ở trong SafeZone không
 function MapService.IsInSafeZone(position: Vector3): boolean
 	local safeZonesFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("SafeZones")
-	if not safeZonesFolder then return false end
+	if not safeZonesFolder then
+		return false
+	end
 
 	for _, zone in ipairs(safeZonesFolder:GetChildren()) do
 		if zone:IsA("BasePart") then
 			local localPos = zone.CFrame:PointToObjectSpace(position)
 			local size = zone.Size / 2
 			-- Thêm chiều cao Y cao hơn một chút để luôn bắt được cả thân trên
-			if math.abs(localPos.X) <= size.X and math.abs(localPos.Y) <= size.Y + 20 and math.abs(localPos.Z) <= size.Z then
+			if
+				math.abs(localPos.X) <= size.X
+				and math.abs(localPos.Y) <= size.Y + 20
+				and math.abs(localPos.Z) <= size.Z
+			then
 				return true
 			end
 		end

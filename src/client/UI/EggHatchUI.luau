@@ -11,20 +11,35 @@ local Types = require(Shared:WaitForChild("Types"))
 local Config = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local HatchUI = require(script.Parent:WaitForChild("HatchUI"))
+local Ripple = require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Ripple"))
 
 local EggHatchUI = {}
 
 local hatchScreen: ScreenGui? = nil
 local isAnimating = false
 
-local function getModel(modelType: string, idOrName: string, fallbackColor: Color3): BasePart | Model
+-- Fallback for different Ripple versions
+local createMotion = Ripple.createMotion or Ripple.create
+if not createMotion then
+	warn("[EggHatchUI] Ripple.createMotion is nil! Export structure:", Ripple)
+end
+
+local function getModel(modelType: string, idOrName: string, fallbackColor: Color3): Model
 	local modelsFolder = ReplicatedStorage:FindFirstChild("Models")
 	if modelsFolder then
 		local subFolder = modelsFolder:FindFirstChild(modelType)
 		if subFolder then
 			local model = subFolder:FindFirstChild(idOrName) or subFolder:FindFirstChild("Default")
-			if model and (model:IsA("Model") or model:IsA("BasePart")) then
-				return model:Clone()
+			if model then
+				if model:IsA("Model") then
+					return model:Clone()
+				elseif model:IsA("BasePart") then
+					local m = Instance.new("Model")
+					local c = model:Clone()
+					c.Parent = m
+					m.PrimaryPart = c
+					return m
+				end
 			end
 		end
 	end
@@ -42,12 +57,20 @@ local function getModel(modelType: string, idOrName: string, fallbackColor: Colo
 		part.Shape = Enum.PartType.Block
 		part.Size = Vector3.new(3, 3, 3)
 	end
-	return part
+	
+	local m = Instance.new("Model")
+	part.Parent = m
+	m.PrimaryPart = part
+	return m
 end
 
 local function playHatchAnimation(pets: {Types.PetData}, overrideParent: Instance?)
 	if isAnimating then return end
 	if not hatchScreen then return end
+	if not createMotion then 
+		warn("[EggHatchUI] Cannot animate, Ripple library missing createMotion or create function")
+		return 
+	end
 	isAnimating = true
 
 	local screen = hatchScreen :: ScreenGui
@@ -60,44 +83,43 @@ local function playHatchAnimation(pets: {Types.PetData}, overrideParent: Instanc
 	cam.CFrame = CFrame.new(Vector3.new(0, 5, 22), Vector3.new(0, 5, 0))
 
 	local eggModel = getModel("Eggs", "BasicEgg", Color3.fromRGB(220, 210, 190))
-	local eggInstance = eggModel :: Instance
-	eggInstance.Parent = vp
+	eggModel.Parent = vp
 
 	local baseCFrame = CFrame.new(0, 5, 0)
 	eggModel:PivotTo(baseCFrame)
 
 	local shakeDuration = 2.0
-	local shakeEndTime = os.clock() + shakeDuration
-	local shakeConnection: RBXScriptConnection
+	local shakeMotion = createMotion(Vector3.new(0, 0, 0))
+	local rotMotion = createMotion(Vector3.new(0, 0, 0))
 
-	shakeConnection = RunService.RenderStepped:Connect(function()
-		local t = os.clock()
-		if t >= shakeEndTime then
-			shakeConnection:Disconnect()
-			return
-		end
-		
-		local progress = 1 - ((shakeEndTime - t) / shakeDuration)
-		local intensity = progress * 2.0
-		local offset = Vector3.new(math.random(-10,10)*0.01*intensity, math.random(-10,10)*0.01*intensity, 0)
-		local rotY = math.random(-25, 25) * intensity
-		local rotZ = math.random(-15, 15) * intensity
+	-- Set up solvers for Ripple 0.9+
+	if shakeMotion.spring then
+		shakeMotion:spring(Vector3.new(0, 0, 0), { frequency = 12, damping = 0.4 })
+		rotMotion:spring(Vector3.new(0, 0, 0), { frequency = 10, damping = 0.5 })
+	end
 
-		local newCF = baseCFrame * CFrame.new(offset) * CFrame.Angles(0, math.rad(rotY), math.rad(rotZ))
-
-		eggModel:PivotTo(newCF)
+	local shakeConnection = RunService.RenderStepped:Connect(function(dt)
+		local offset = shakeMotion:step(dt)
+		local rot = rotMotion:step(dt)
+		eggModel:PivotTo(baseCFrame * CFrame.new(offset) * CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z)))
 	end)
 
 	task.spawn(function()
-		for i = 1, 5 do
+		local intervals = 8
+		for i = 1, intervals do
+			local intensity = (i / intervals) * 2
+			shakeMotion:impulse(Vector3.new(math.random(-5, 5) * intensity, math.random(-5, 5) * intensity, 0))
+			rotMotion:impulse(Vector3.new(math.random(-15, 15) * intensity, math.random(-30, 30) * intensity, math.random(-15, 15) * intensity))
+			
 			if Config.Audio and Config.Audio.EggShakeSFX then
 				HatchUI.PlaySFX(Config.Audio.EggShakeSFX, 0.8 + (i * 0.1))
 			end
-			task.wait(shakeDuration / 5)
+			task.wait(shakeDuration / intervals)
 		end
 	end)
 
 	task.wait(shakeDuration)
+	shakeConnection:Disconnect()
 	eggModel:Destroy()
 
 	if Config.Audio and Config.Audio.EggFlashSFX then
@@ -130,14 +152,28 @@ local function playHatchAnimation(pets: {Types.PetData}, overrideParent: Instanc
 	for i, pet in ipairs(pets) do
 		local pColor = Config.Theme.RarityColors[pet.Rarity] or Color3.fromRGB(200, 200, 200)
 		local pModel = getModel("Pets", pet.PetType, pColor)
-		local petInstance = pModel :: Instance
-		petInstance.Parent = vp
+		pModel.Parent = vp
 
 		local tPos = Vector3.new(startX + (i-1)*spacing, 5, 0)
 		local tCFrame = CFrame.new(tPos) * CFrame.Angles(0, math.rad(15), 0)
-		
 		pModel:PivotTo(tCFrame)
 		
+		-- Use Ripple for a "Pop-in" scale effect
+		local popMotion = createMotion(0)
+		popMotion:set(1.5)
+		if popMotion.spring then
+			popMotion:spring(1, { frequency = 6, damping = 0.5 })
+		else
+			popMotion:set(1)
+		end
+		
+		local popConn
+		popConn = RunService.RenderStepped:Connect(function(dt)
+			if not pModel.Parent then popConn:Disconnect(); return end
+			local s = popMotion:step(dt)
+			pModel:ScaleTo(s)
+		end)
+
 		table.insert(spunModels, {model = pModel, pos = tPos})
 
 		local lbl = Instance.new("TextLabel")

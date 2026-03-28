@@ -3,9 +3,14 @@
 registry = "test"
 
 [[package]]
+name = "evaera/promise"
+version = "4.0.0"
+dependencies = []
+
+[[package]]
 name = "goku/shout-simulator"
 version = "0.1.0"
-dependencies = [["React", "jsdotlua/react@17.2.1"], ["ReactRoblox", "jsdotlua/react-roblox@17.2.1"]]
+dependencies = [["React", "jsdotlua/react@17.2.1"], ["ReactRoblox", "jsdotlua/react-roblox@17.2.1"], ["Ripple", "littensy/ripple@0.9.3"], ["ZonePlus", "mattschrubb/zoneplus@3.2.0"]]
 
 [[package]]
 name = "jsdotlua/boolean"
@@ -91,3 +96,13 @@ dependencies = []
 name = "jsdotlua/timers"
 version = "1.2.7"
 dependencies = [["collections", "jsdotlua/collections@1.2.7"]]
+
+[[package]]
+name = "littensy/ripple"
+version = "0.9.3"
+dependencies = [["Promise", "evaera/promise@4.0.0"]]
+
+[[package]]
+name = "mattschrubb/zoneplus"
+version = "3.2.0"
+dependencies = []

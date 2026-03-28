@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
+local Ripple = require(ReplicatedStorage.Packages.Ripple)
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Config)
 
@@ -16,10 +17,10 @@ type ButtonProps = {
 local function Button(props: ButtonProps)
 	local isEnabled = if props.Enabled ~= nil then props.Enabled else true
 	local variant = props.Variant or "Primary"
-	
+
 	local baseColor = Config.Theme.BtnShopBase
 	local shadowColor = Config.Theme.BtnShopShadow
-	
+
 	if variant == "Success" then
 		baseColor = Config.Theme.SuccessGradient[1]
 		shadowColor = Config.Theme.SuccessGradient[2]
@@ -44,6 +45,57 @@ local function Button(props: ButtonProps)
 
 	local radius = if props.Size then UDim.new(0, props.Size.Y.Offset / 2) else UDim.new(0, 22)
 
+	-- Ripple Motion
+	local scale, setScale = React.useState(1)
+	local scaleMotion = React.useMemo(function()
+		return Ripple.createMotion(1)
+	end, {})
+
+	React.useEffect(function()
+		local disconnect = scaleMotion:onStep(function(value)
+			setScale(value)
+		end)
+		return function()
+			disconnect()
+		end
+	end, { scaleMotion })
+
+	local function onMouseEnter()
+		if isEnabled then
+			scaleMotion:spring(1.05, Ripple.config.spring.gentle :: any)
+		end
+	end
+
+	local function onMouseLeave()
+		if isEnabled then
+			scaleMotion:spring(1, Ripple.config.spring.gentle :: any)
+		end
+	end
+
+	local function onInputBegan(rbx, input)
+		if
+			isEnabled
+			and (
+				input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.Touch
+			)
+		then
+			scaleMotion:spring(0.9, Ripple.config.spring.stiff :: any)
+		end
+	end
+
+	local function onInputEnded(rbx, input)
+		if
+			isEnabled
+			and (
+				input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.Touch
+			)
+		then
+			scaleMotion:spring(1.05, Ripple.config.spring.gentle :: any)
+		end
+	end
+
 	return React.createElement("Frame", {
 		Name = props.Text .. "Button",
 		Size = props.Size or UDim2.new(0, 160, 0, 44),
@@ -51,6 +103,10 @@ local function Button(props: ButtonProps)
 		LayoutOrder = props.LayoutOrder,
 		BackgroundTransparency = 1,
 	}, {
+		UIScale = React.createElement("UIScale", {
+			Scale = scale,
+		}),
+
 		Shadow = React.createElement("Frame", {
 			Size = UDim2.new(1, 0, 1, 0),
 			BackgroundColor3 = shadowColor,
@@ -63,13 +119,19 @@ local function Button(props: ButtonProps)
 		Main = React.createElement("TextButton", {
 			Size = UDim2.new(1, 0, 1, -4),
 			BackgroundColor3 = baseColor,
-			Text = "", 
+			Text = "",
 			BorderSizePixel = 0,
-			AutoButtonColor = isEnabled,
+			AutoButtonColor = false, -- Disable default Roblox hover effect to use Ripple
 			ZIndex = 2,
 			[React.Event.Activated] = function()
-				if isEnabled then props.OnClick() end
+				if isEnabled then
+					props.OnClick()
+				end
 			end,
+			[React.Event.MouseEnter] = onMouseEnter,
+			[React.Event.MouseLeave] = onMouseLeave,
+			[React.Event.InputBegan] = onInputBegan,
+			[React.Event.InputEnded] = onInputEnded,
 		}, {
 			Corner = React.createElement("UICorner", { CornerRadius = radius }),
 			Stroke = React.createElement("UIStroke", {

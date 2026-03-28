@@ -124,6 +124,11 @@ export type SkillConfig = {
 	Icon: string,
 	Description: string,
 	IsBasic: boolean?,
+	EffectColor: Color3?,
+	SecondaryColor: Color3?,
+	EffectSize: number?,
+	AnimationId: string?,
+	ChargingAnimationId: string?,
 }
 
 -- Shout request từ client lên server

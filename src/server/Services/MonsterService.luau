@@ -2,39 +2,48 @@
 -- MonsterService.luau
 -- Server-side: Spawn quái vật, AI đơn giản, drop Gold/Egg khi chết
 
-local Players     = game:GetService("Players")
-local Workspace   = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 local TweenService = game:GetService("TweenService")
-local PathfindingService = game:GetService("PathfindingService")
 
-local Shared      = game.ReplicatedStorage.Shared
-local Config      = require(Shared.Config)
-local Types       = require(Shared.Types)
-local Remotes     = require(Shared.Remotes)
+local Shared = game.ReplicatedStorage.Shared
+local Config = require(Shared.Config)
+local Types = require(Shared.Types)
+local Remotes = require(Shared.Remotes)
+local SimplePath = require(Shared.SimplePath)
 
 local DataService: any = nil
 task.defer(function()
 	DataService = require(script.Parent.DataService)
 end)
 
-local MapService: any = nil
+local _MapService: any = nil
 task.defer(function()
-	MapService = require(script.Parent.MapService)
+	_MapService = require(script.Parent.MapService)
 end)
 
 local MonsterService = {}
 
 -- Track instances đang sống
+-- Track instances đang sống
+type MonsterAIState = "IDLE" | "WANDER" | "CHASE" | "ATTACK" | "RETURN"
+
 type MonsterInstance = {
-	Model     : Model,
-	Config    : Types.MonsterConfig,
-	CurrentHP : number,
-	IsAlive   : boolean,
-	LastAttackInfo : number?,
+	Model: Model,
+	Config: Types.MonsterConfig,
+	CurrentHP: number,
+	IsAlive: boolean,
+	LastAttackTime: number,
+	State: MonsterAIState,
+	SimplePath: any,
+	SpawnPos: Vector3,
+	ZoneCenter: Vector3,
+	ZoneSize: Vector3,
+	LastUpdate: number,
 }
 
-local ActiveMonsters: { MonsterInstance } = {}
+local ActiveMonsters: { [Model]: MonsterInstance } = {}
 
 -- ============================================================
 -- HELPER: Tạo model quái đơn giản (placeholder - dev thêm model sau)
@@ -42,22 +51,24 @@ local ActiveMonsters: { MonsterInstance } = {}
 local function createMonsterModel(cfg: Types.MonsterConfig, position: Vector3): Model?
 	-- Tìm zone trong workspace
 	local zoneFolder = Workspace:WaitForChild(cfg.SpawnZone, 10)
-	if not zoneFolder then return nil end
+	if not zoneFolder then
+		return nil
+	end
 
 	local model = Instance.new("Model")
 	model.Name = cfg.Id
 
 	-- Main body
 	local body = Instance.new("Part")
-	body.Name      = "HumanoidRootPart"
-	body.Position  = position
+	body.Name = "HumanoidRootPart"
+	body.Position = position
 
 	if cfg.Id == "ScreechSlime" then
-		body.Size      = Vector3.new(4, 4, 4)
-		body.Shape     = Enum.PartType.Ball
+		body.Size = Vector3.new(4, 4, 4)
+		body.Shape = Enum.PartType.Ball
 		body.BrickColor = BrickColor.new("Lime green")
-		body.Material  = Enum.Material.Neon
-		
+		body.Material = Enum.Material.Neon
+
 		-- Eyes
 		for i = -1, 1, 2 do
 			local eye = Instance.new("Part")
@@ -65,18 +76,17 @@ local function createMonsterModel(cfg: Types.MonsterConfig, position: Vector3): 
 			eye.Shape = Enum.PartType.Ball
 			eye.Color = Color3.fromRGB(0, 0, 0)
 			eye.Parent = model
-			
+
 			local weld = Instance.new("WeldConstraint")
 			weld.Part0 = body
 			weld.Part1 = eye
 			weld.Parent = body
 			eye.Position = body.Position + Vector3.new(i * 0.8, 0.5, -1.8)
 		end
-		
 	elseif cfg.Id == "BoomGolem" then
-		body.Size      = Vector3.new(5, 6, 5)
+		body.Size = Vector3.new(5, 6, 5)
 		body.BrickColor = BrickColor.new("Dark stone grey")
-		body.Material  = Enum.Material.Slate
+		body.Material = Enum.Material.Slate
 
 		-- Arms
 		for i = -1, 1, 2 do
@@ -103,11 +113,10 @@ local function createMonsterModel(cfg: Types.MonsterConfig, position: Vector3): 
 		headWeld.Part1 = head
 		headWeld.Parent = body
 		head.Position = body.Position + Vector3.new(0, 4.5, 0)
-		
 	elseif cfg.Id == "SoundKing" then
-		body.Size      = Vector3.new(6, 8, 6)
+		body.Size = Vector3.new(6, 8, 6)
 		body.Color = Color3.fromRGB(255, 215, 0) -- Gold
-		body.Material  = Enum.Material.Foil
+		body.Material = Enum.Material.Foil
 
 		-- Crown
 		local crown = Instance.new("Part")
@@ -132,77 +141,77 @@ local function createMonsterModel(cfg: Types.MonsterConfig, position: Vector3): 
 		capeWeld.Part1 = cape
 		capeWeld.Parent = body
 		cape.Position = body.Position + Vector3.new(0, 0.5, 3.5)
-	
 	elseif cfg.Id == "EchoToad" then
-		body.Size      = Vector3.new(5, 3, 5)
+		body.Size = Vector3.new(5, 3, 5)
 		body.BrickColor = BrickColor.new("Earth green")
-		body.Material  = Enum.Material.Grass
+		body.Material = Enum.Material.Grass
 	elseif cfg.Id == "DustDevil" then
-		body.Size      = Vector3.new(3, 8, 3)
+		body.Size = Vector3.new(3, 8, 3)
 		body.BrickColor = BrickColor.new("Brick yellow")
-		body.Material  = Enum.Material.Sand
+		body.Material = Enum.Material.Sand
 	elseif cfg.Id == "SandGolem" then
-		body.Size      = Vector3.new(6, 7, 6)
+		body.Size = Vector3.new(6, 7, 6)
 		body.BrickColor = BrickColor.new("Deep orange")
-		body.Material  = Enum.Material.Slate
+		body.Material = Enum.Material.Slate
 	elseif cfg.Id == "IcyWraith" then
-		body.Size      = Vector3.new(3, 6, 3)
+		body.Size = Vector3.new(3, 6, 3)
 		body.BrickColor = BrickColor.new("Pastel light blue")
-		body.Material  = Enum.Material.Ice
+		body.Material = Enum.Material.Ice
 		body.Transparency = 0.5
 	elseif cfg.Id == "FrostGiant" then
-		body.Size      = Vector3.new(8, 10, 8)
+		body.Size = Vector3.new(8, 10, 8)
 		body.BrickColor = BrickColor.new("Cyan")
-		body.Material  = Enum.Material.Ice
+		body.Material = Enum.Material.Ice
 	elseif cfg.Id == "VoidSerpent" then
-		body.Size      = Vector3.new(4, 12, 4)
+		body.Size = Vector3.new(4, 12, 4)
 		body.BrickColor = BrickColor.new("Royal purple")
-		body.Material  = Enum.Material.Neon
+		body.Material = Enum.Material.Neon
 	elseif cfg.Id == "ShadowBeast" then
-		body.Size      = Vector3.new(7, 6, 8)
+		body.Size = Vector3.new(7, 6, 8)
 		body.BrickColor = BrickColor.new("Really black")
-		body.Material  = Enum.Material.Granite
+		body.Material = Enum.Material.Granite
 	elseif cfg.Id == "DivineGuardian" then
-		body.Size      = Vector3.new(8, 12, 8)
+		body.Size = Vector3.new(8, 12, 8)
 		body.BrickColor = BrickColor.new("Institutional white")
-		body.Material  = Enum.Material.Neon
+		body.Material = Enum.Material.Neon
 	elseif cfg.Id == "IceColossus" then
-		body.Size      = Vector3.new(12, 16, 12)
+		body.Size = Vector3.new(12, 16, 12)
 		body.BrickColor = BrickColor.new("Toothpaste")
-		body.Material  = Enum.Material.Ice
+		body.Material = Enum.Material.Ice
 	else
 		-- Fallback placeholder
-		body.Size      = Vector3.new(4, 5, 4)
+		body.Size = Vector3.new(4, 5, 4)
 		body.BrickColor = BrickColor.new("Bright red")
 	end
 
-	body.Parent    = model
+	body.Parent = model
 
 	local humanoid = Instance.new("Humanoid")
-	humanoid.MaxHealth   = cfg.MaxHP
-	humanoid.Health      = cfg.MaxHP
-	humanoid.WalkSpeed   = cfg.MovementSpeed
+	humanoid.MaxHealth = cfg.MaxHP
+	humanoid.Health = cfg.MaxHP
+	humanoid.WalkSpeed = cfg.MovementSpeed
 	humanoid.DisplayName = cfg.DisplayName
-	humanoid.Parent      = model
+	humanoid.BreakJointsOnDeath = false
+	humanoid.Parent = model
 
 	-- Set attributes for ShoutService lookup
 	model:SetAttribute("Defense", cfg.Defense)
 	model:SetAttribute("KnockbackResistance", cfg.KnockbackResistance or 0)
 
 	-- Health display bar
-	local billGui       = Instance.new("BillboardGui")
-	billGui.Size        = UDim2.new(4, 0, 0.7, 0)
-	billGui.StudsOffset = Vector3.new(0, body.Size.Y/2 + 1.5, 0)
-	billGui.Parent      = body
+	local billGui = Instance.new("BillboardGui")
+	billGui.Size = UDim2.new(4, 0, 0.7, 0)
+	billGui.StudsOffset = Vector3.new(0, body.Size.Y / 2 + 1.5, 0)
+	billGui.Parent = body
 
-	local nameLabel        = Instance.new("TextLabel")
-	nameLabel.Size         = UDim2.new(1, 0, 0.6, 0)
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, 0, 0.6, 0)
 	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text         = cfg.DisplayName
-	nameLabel.TextColor3   = Color3.fromRGB(255, 80, 80)
-	nameLabel.Font         = Enum.Font.GothamBold
-	nameLabel.TextScaled   = true
-	nameLabel.Parent       = billGui
+	nameLabel.Text = cfg.DisplayName
+	nameLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextScaled = true
+	nameLabel.Parent = billGui
 
 	local healthBg = Instance.new("Frame")
 	healthBg.Name = "HealthBg"
@@ -222,18 +231,46 @@ local function createMonsterModel(cfg: Types.MonsterConfig, position: Vector3): 
 	CollectionService:AddTag(model, "Monster")
 
 	model.PrimaryPart = body
-	model.Parent      = Workspace
+	-- model:ScaleTo(0.01)
+	model.Parent = Workspace
+	
+	-- Spawn Effect
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = false
+	p.Transparency = 1
+	p.Position = body.Position
+	p.Parent = Workspace
+	local attachment = Instance.new("Attachment", p)
+	local particles = Instance.new("ParticleEmitter")
+	particles.Color = ColorSequence.new(body.Color)
+	particles.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 2), NumberSequenceKeypoint.new(1, 0)})
+	particles.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1)})
+	particles.Lifetime = NumberRange.new(0.5, 1)
+	particles.Speed = NumberRange.new(5, 15)
+	particles.Rate = 0
+	particles.Parent = attachment
+	particles:Emit(30)
+	game.Debris:AddItem(p, 2)
+
+	print("[MonsterService] Created model for:", cfg.Id, "at", body.Position)
 
 	return model
 end
 
 -- Drop reward khi quái chết
 local function dropRewards(cfg: Types.MonsterConfig, position: Vector3, killerPlayer: Player?)
-	if not killerPlayer then return end
-	if not DataService then return end
+	if not killerPlayer then
+		return
+	end
+	if not DataService then
+		return
+	end
 
 	local data = DataService.GetData(killerPlayer) :: Types.PlayerData?
-	if not data then return end
+	if not data then
+		return
+	end
 
 	local updates: { [string]: any } = {
 		Gold = data.Gold + cfg.GoldDrop,
@@ -279,202 +316,123 @@ end
 -- ============================================================
 -- SPAWN MONSTER
 -- ============================================================
+-- ============================================================
+-- SPAWN MONSTER
+-- ============================================================
 local function spawnMonster(cfg: Types.MonsterConfig)
 	-- Tìm vị trí spawn trong zone
 	local zoneFolder = Workspace:WaitForChild(cfg.SpawnZone, 10)
-	local spawnPos   = Vector3.new(0, 5, 0)
+	local spawnPos = Vector3.new(0, 5, 0)
 	local zoneCenter = Vector3.new(0, 0, 0)
-	local zoneSizeX  = 150 -- Kích thước mặc định an toàn cho hình chữ nhật/vuông
-	local zoneSizeZ  = 150
+	local zoneSizeX = 150
+	local zoneSizeZ = 150
 
 	if zoneFolder then
 		local base = zoneFolder:FindFirstChild("Base") :: BasePart?
 		if base then
 			zoneCenter = base.Position
-			zoneSizeX  = base.Size.X
-			zoneSizeZ  = base.Size.Z
-			
-			-- Randomize spawn position across the entire zone base
-			spawnPos = zoneCenter + Vector3.new(
-				math.random(-math.floor(zoneSizeX/2) + 5, math.floor(zoneSizeX/2) - 5),
-				5,
-				math.random(-math.floor(zoneSizeZ/2) + 5, math.floor(zoneSizeZ/2) - 5)
-			)
+			zoneSizeX = base.Size.X
+			zoneSizeZ = base.Size.Z
+
+			spawnPos = zoneCenter
+				+ Vector3.new(
+					math.random(-math.floor(zoneSizeX / 2) + 5, math.floor(zoneSizeX / 2) - 5),
+					5,
+					math.random(-math.floor(zoneSizeZ / 2) + 5, math.floor(zoneSizeZ / 2) - 5)
+				)
 		end
 	end
 
 	local model = createMonsterModel(cfg, spawnPos)
 	if not model then return end
 
-	local humanoid = model:FindFirstChildOfClass("Humanoid") :: Humanoid?
-	if not humanoid then return end
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	local hrp = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart") :: BasePart
+	
+	-- CRITICAL: Prevent network ownership jitter
+	if hrp:CanSetNetworkOwnership() then
+		hrp:SetNetworkOwner(nil)
+	end
+	
+	local path = SimplePath.new(model, {
+		AgentRadius = hrp.Size.X / 2 + 1,
+		AgentHeight = hrp.Size.Y + 1,
+		AgentCanJump = if humanoid then true else false,
+	})
 
 	local instance: MonsterInstance = {
-		Model     = model,
-		Config    = cfg,
+		Model = model,
+		Config = cfg,
 		CurrentHP = cfg.MaxHP,
-		IsAlive   = true,
+		IsAlive = true,
+		LastAttackTime = 0,
+		State = "IDLE",
+		SimplePath = path,
+		SpawnPos = spawnPos,
+		ZoneCenter = zoneCenter,
+		ZoneSize = Vector3.new(zoneSizeX, 0, zoneSizeZ),
+		LastUpdate = 0,
 	}
 
-	table.insert(ActiveMonsters, instance)
+	ActiveMonsters[model] = instance
 
-	-- Pathfinding AI Loop
-	task.spawn(function()
-		local lastWander = 0
-		local wanderInterval = math.random(3, 6)
-
-		while instance.IsAlive and model.Parent do
-			task.wait(0.5)
-			if not instance.IsAlive then break end
-
-			local hrp = model:FindFirstChild("HumanoidRootPart") :: BasePart?
-			if not hrp then continue end
-			if humanoid.PlatformStand then continue end -- Đang bị knocked back
-			
-			-- Leashing: Ép quái vật quay về nếu bản thân nó bị xô đẩy ra quá xa tâm Zone
-			local hrpDx = math.abs(hrp.Position.X - zoneCenter.X)
-			local hrpDz = math.abs(hrp.Position.Z - zoneCenter.Z)
-			if hrpDx > zoneSizeX/2 or hrpDz > zoneSizeZ/2 then
-				humanoid:MoveTo(spawnPos)
-				continue
+	-- Damage handler
+	if humanoid then
+		humanoid.HealthChanged:Connect(function(newHP)
+			if not instance.IsAlive then
+				return
 			end
-
-			local nearestPlayer: Player? = nil
-			local minDist = 150 -- Chase radius
-			
-			for _, p in ipairs(Players:GetPlayers()) do
-				local c = p.Character
-				if c then
-					local phrp = c:FindFirstChild("HumanoidRootPart") :: BasePart?
-					if phrp then
-						if MapService and MapService.IsInSafeZone(phrp.Position) then continue end
-						
-						-- CHÍNH XÁC YÊU CẦU: Khóa chặt bằng Box Boundary của BaseZone, không tính chiều cao Y!
-						local pDx = math.abs(phrp.Position.X - zoneCenter.X)
-						local pDz = math.abs(phrp.Position.Z - zoneCenter.Z)
-						if pDx > zoneSizeX/2 or pDz > zoneSizeZ/2 then continue end
-						
-						local dist = (phrp.Position - hrp.Position).Magnitude
-						if dist < minDist then
-							minDist = dist
-							nearestPlayer = p
+			instance.CurrentHP = newHP
+	
+			-- Cập nhật thanh máu mượt mà
+			local rootPart = model:FindFirstChild("HumanoidRootPart")
+			if rootPart then
+				local bGui = rootPart:FindFirstChildOfClass("BillboardGui")
+				if bGui then
+					local hBg = bGui:FindFirstChild("HealthBg")
+					if hBg then
+						local hBar = hBg:FindFirstChild("HealthBar") :: GuiObject?
+						if hBar then
+							local pct = math.clamp(newHP / cfg.MaxHP, 0, 1)
+							TweenService:Create(hBar, TweenInfo.new(0.2), { Size = UDim2.new(pct, 0, 1, 0) }):Play()
+							hBar.BackgroundColor3 = Color3.fromRGB(255 - (205 * pct), 50 + (205 * pct), 50)
 						end
 					end
 				end
 			end
-
-			if nearestPlayer and nearestPlayer.Character then
-				local targetHrp = nearestPlayer.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-				if targetHrp then
-					local distToTarget = (hrp.Position - targetHrp.Position).Magnitude
-					
-					if distToTarget <= Config.Shout.KnockbackRange then
-						-- ATK RANGE
-						local now = os.clock()
-						local lastAtk = instance.LastAttackInfo or 0
-						if now - lastAtk >= 3.0 then -- 3 seconds cooldown
-							instance.LastAttackInfo = now
-							
-							local shoutDir = (targetHrp.Position - hrp.Position).Unit
-							-- Quick lock on
-							hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + shoutDir * Vector3.new(1,0,1))
-							
-							local shoutType = Config.ShoutTypes.Normal
-							if cfg.IsBoss and instance.CurrentHP < cfg.MaxHP * 0.5 then
-								shoutType = Config.ShoutTypes.Circular
-							end
-							
-							task.spawn(function()
-								local ShoutService = require(script.Parent.ShoutService)
-								;(ShoutService :: any).PerformShout(model, cfg.Attack, shoutDir, true, nil, nil, shoutType)
-							end)
-						end
-					else
-						local path = PathfindingService:CreatePath({AgentRadius = 3, AgentHeight = 5, AgentCanJump = true})
-						local success, _ = pcall(function() path:ComputeAsync(hrp.Position, targetHrp.Position) end)
-
-						if success and path.Status == Enum.PathStatus.Success then
-							local waypoints = path:GetWaypoints()
-							if #waypoints > 1 then humanoid:MoveTo(waypoints[2].Position) end
-						else
-							humanoid:MoveTo(targetHrp.Position)
-						end
-					end
-				end
-			else
-				-- Nếu không có player gần, quái vật đi "linh tinh" trong zone
-				local now = os.clock()
-				if now - lastWander >= wanderInterval then
-					lastWander = now
-					wanderInterval = math.random(4, 10) -- Randomize interval cho lần tới
-					
-					-- Tính toán điểm random mới trong zone
-					local randomPos = zoneCenter + Vector3.new(
-						math.random(-math.floor(zoneSizeX/2) + 5, math.floor(zoneSizeX/2) - 5),
-						0,
-						math.random(-math.floor(zoneSizeZ/2) + 5, math.floor(zoneSizeZ/2) - 5)
-					)
-					
-					-- Giữ nguyên độ cao Y hiện tại để tránh quái vật bay/chìm
-					randomPos = Vector3.new(randomPos.X, hrp.Position.Y, randomPos.Z)
-					humanoid:MoveTo(randomPos)
-				end
-			end
-		end
-	end)
-
-	-- Damage handler: nhận knockback từ ShoutService via workspace collision
-	humanoid.HealthChanged:Connect(function(newHP)
-		if not instance.IsAlive then return end
-		instance.CurrentHP = newHP
-
-		-- Cập nhật thanh máu mượt mà
-		local rootPart = model:FindFirstChild("HumanoidRootPart")
-		if rootPart then
-			local bGui = rootPart:FindFirstChildOfClass("BillboardGui")
-			if bGui then
-				local hBg = bGui:FindFirstChild("HealthBg")
-				if hBg then
-					local hBar = hBg:FindFirstChild("HealthBar") :: GuiObject?
-					if hBar then
-						local pct = math.clamp(newHP / cfg.MaxHP, 0, 1)
-						TweenService:Create(hBar, TweenInfo.new(0.2), {Size = UDim2.new(pct, 0, 1, 0)}):Play()
-						hBar.BackgroundColor3 = Color3.fromRGB(255 - (205 * pct), 50 + (205 * pct), 50)
-					end
-				end
-			end
-		end
-
-		if newHP <= 0 then
-			instance.IsAlive = false
-
-			-- Chỉ nhận quà nếu được kết liễu bởi Player (LastDamagedBy)
-			local hrp = model:FindFirstChild("HumanoidRootPart") :: BasePart?
-			local killer: Player? = nil
-			if hrp then
+	
+			if newHP <= 0 then
+				instance.IsAlive = false
+	
+				-- Chỉ nhận quà nếu được kết liễu bởi Player (LastDamagedBy)
+				local killer: Player? = nil
 				local lastDamagedById = model:GetAttribute("LastDamagedBy")
 				if lastDamagedById then
 					killer = Players:GetPlayerByUserId(lastDamagedById)
 				end
+	
+				dropRewards(cfg, spawnPos, killer)
+	
+				-- Set Dying attribute so client can play an animation
+				model:SetAttribute("Dying", true)
+	
+				-- Delay destruction to allow for client-side VFX (e.g., Ripple squash/fade)
+				task.delay(1.0, function()
+					if model and model.Parent then
+						model:Destroy()
+					end
+				end)
+	
+				-- Remove from active
+				ActiveMonsters[model] = nil
+	
+				-- Respawn sau interval
+				task.delay(Config.MonsterRespawnTime, function()
+					spawnMonster(cfg)
+				end)
 			end
-
-			dropRewards(cfg, spawnPos, killer)
-			model:Destroy()
-
-			-- Remove from active
-			for i, m in ipairs(ActiveMonsters) do
-				if m == instance then
-					table.remove(ActiveMonsters, i)
-					break
-				end
-			end
-
-			-- Respawn sau interval
-			task.delay(Config.MonsterRespawnTime, function()
-				spawnMonster(cfg)
-			end)
-		end
-	end)
+		end)
+	end
 end
 
 -- ============================================================
@@ -484,7 +442,138 @@ function MonsterService.Init()
 	for _, cfg in ipairs(Config.Monsters) do
 		task.spawn(spawnMonster, cfg)
 	end
-	print("[MonsterService] Spawned " .. #Config.Monsters .. " monster types")
+
+	-- Centralized AI Loop with Proximity Culling
+	game:GetService("RunService").Heartbeat:Connect(function()
+		local now = os.clock()
+		local allPlayers = Players:GetPlayers()
+		
+		for model, instance in pairs(ActiveMonsters) do
+			-- Throttle updates (5Hz for normal, faster for bosses)
+			local updateRate = if instance.Config.IsBoss then 0.1 else 0.2
+			if now - (instance.LastUpdate or 0) < updateRate then continue end
+			instance.LastUpdate = now
+
+			local hrp = model.PrimaryPart :: BasePart?
+			local humanoid = model:FindFirstChildOfClass("Humanoid")
+			if not hrp or not humanoid or humanoid.Health <= 0 then continue end
+			
+			-- 1. Proximity Culling: Don't process AI if no player is nearby
+			local nearestPlayer: Player? = nil
+			local minDist = 300 -- Massive cull radius
+			local activeDist = if instance.Config.IsBoss then 200 else 80
+
+			for _, p in ipairs(allPlayers) do
+				local c = p.Character
+				local phrp = c and c:FindFirstChild("HumanoidRootPart") :: BasePart?
+				if phrp then
+					local d = (phrp.Position - hrp.Position).Magnitude
+					if d < minDist then
+						minDist = d
+						if d < activeDist then nearestPlayer = p end
+					end
+				end
+			end
+
+			-- Culling check
+			if minDist > 300 and instance.State == "IDLE" then
+				continue
+			end
+
+			-- 2. AI Logic (Simplified from the original per-monster loop)
+			local path = instance.SimplePath
+			if humanoid.PlatformStand then 
+				path:Stop()
+				continue 
+			end
+
+			local zoneCenter = instance.ZoneCenter
+			local zoneSizeX = instance.ZoneSize.X
+			local zoneSizeZ = instance.ZoneSize.Z
+
+			-- Leashing logic: Force return if too far
+			local flatPos = Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
+			local flatCenter = Vector3.new(zoneCenter.X, 0, zoneCenter.Z)
+			local distFromZoneCenter = (flatPos - flatCenter).Magnitude
+			local leashRange = (math.max(zoneSizeX, zoneSizeZ) / 2) + 15 -- Radius + 15 stud buffer
+			
+			if distFromZoneCenter > leashRange then
+				if instance.State ~= "RETURN" then
+					print(string.format("[MonsterService] LEASHING: %s (Dist: %.1f > Max: %.1f)", model.Name, distFromZoneCenter, leashRange))
+				end
+				instance.State = "RETURN"
+			end
+
+			-- State-based filtering: Can we aggro?
+			local canAggro = true
+			local distFromSpawn = (hrp.Position - instance.SpawnPos).Magnitude
+			if instance.State == "RETURN" then
+				if distFromSpawn > 8 then -- Must get back within 8 studs of spawn point
+					canAggro = false
+				else
+					instance.State = "IDLE" -- Successfully returned
+				end
+			end
+
+			if canAggro and nearestPlayer and nearestPlayer.Character then
+				local targetHrp = nearestPlayer.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+				if targetHrp then
+					local distToTarget = (hrp.Position - targetHrp.Position).Magnitude
+					local attackRange = Config.Shout.KnockbackRange - 4
+					
+					if distToTarget <= attackRange then
+						instance.State = "ATTACK"
+						path:Stop()
+						humanoid.AutoRotate = false
+						
+						local dir = (targetHrp.Position - hrp.Position).Unit
+						local targetCFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
+						hrp.CFrame = hrp.CFrame:Lerp(targetCFrame, 0.2)
+						
+						if now - instance.LastAttackTime >= 3.0 then
+							instance.LastAttackTime = now
+							TweenService:Create(hrp, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), {Color = Color3.new(1, 0, 0)}):Play()
+							task.delay(0.6, function()
+								if not instance.IsAlive or not model.Parent then return end
+								local shoutType = if instance.Config.IsBoss and instance.CurrentHP < instance.Config.MaxHP * 0.5 then Config.ShoutTypes.Circular else Config.ShoutTypes.Normal
+								local ShoutService = require(script.Parent.ShoutService)
+								ShoutService.PerformShout(model, instance.Config.Attack, dir, true, nil, nil, shoutType)
+							end)
+						end
+					else
+						instance.State = "CHASE"
+						humanoid.AutoRotate = true
+						path:Run(targetHrp.Position)
+					end
+				end
+			else
+				-- Idle / Wander / Return
+				if instance.State == "RETURN" then
+					humanoid.AutoRotate = true
+					path:Run(instance.SpawnPos)
+					if (hrp.Position - instance.SpawnPos).Magnitude < 5 then
+						instance.State = "IDLE"
+					end
+				elseif instance.State == "WANDER" then
+					humanoid.AutoRotate = true
+					local randomPos = zoneCenter + Vector3.new(math.random(-zoneSizeX/2 + 10, zoneSizeX/2 - 10), 0, math.random(-zoneSizeZ/2 + 10, zoneSizeZ/2 - 10))
+					path:Run(randomPos)
+					if (hrp.Position - randomPos).Magnitude < 5 then
+						instance.State = "IDLE"
+					end
+				else -- IDLE, CHASE, ATTACK (when target lost)
+					if math.random() > 0.95 then
+						instance.State = "WANDER"
+					else
+						instance.State = "IDLE"
+						path:Stop()
+					end
+				end
+			end
+		end
+	end)
+
+	print("[MonsterService] Initialized with Centralized Loop and Proximity Culling")
 end
 
 return MonsterService

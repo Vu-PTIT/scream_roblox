@@ -1,13 +1,13 @@
 --!strict
 -- ShoutService.luau
 
-local Players      = game:GetService("Players")
+local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 
-local Shared      = game.ReplicatedStorage.Shared
-local Config      = require(Shared.Config)
-local Types       = require(Shared.Types)
-local Remotes     = require(Shared.Remotes)
+local Shared = game.ReplicatedStorage.Shared
+local Config = require(Shared.Config)
+local Types = require(Shared.Types)
+local Remotes = require(Shared.Remotes)
 
 local DataService: any = nil
 task.defer(function()
@@ -25,7 +25,7 @@ local ShoutCooldowns: { [string]: number } = {}
 local function getTotalAttack(data: Types.PlayerData): number
 	local upgradeCfg = Config.GetUpgrade("damage_1")
 	local upgradeBonus = data.DamageUpgradeLevel * (upgradeCfg and upgradeCfg.StatPerLevel or 5)
-	
+
 	local petMult = 1
 	for _, petData in ipairs(data.Pets) do
 		if petData.Equipped then
@@ -42,19 +42,24 @@ local function getTotalDefense(data: Types.PlayerData): number
 	return data.Defense + bonus
 end
 
-local function calculateKnockback(attackerAtk : number, targetDef : number, direction : Vector3, resistance: number?): Vector3
+local function calculateKnockback(
+	attackerAtk: number,
+	targetDef: number,
+	direction: Vector3,
+	resistance: number?
+): Vector3
 	local res = resistance or 0
-	local flatComponent  = attackerAtk * 0.2           -- Reduced from 0.4
-	
+	local flatComponent = attackerAtk * 0.2 -- Reduced from 0.4
+
 	-- New formula: use power function (0.7) to dampen extreme ratios
 	local baseRatio = (attackerAtk / math.max(1, targetDef))
 	local ratioComponent = math.pow(baseRatio, 0.7) * Config.Shout.KnockbackScaling
-	
+
 	local rawForce = (Config.Shout.BaseForce + flatComponent + ratioComponent) * (1 - res)
-	local capped   = math.min(rawForce, Config.Shout.MaxForce)
+	local capped = math.min(rawForce, Config.Shout.MaxForce)
 
 	local horizontalDir = Vector3.new(direction.X, 0, direction.Z).Unit
-	local finalForce    = (horizontalDir + Vector3.new(0, Config.Shout.VerticalBias, 0)).Unit * capped
+	local finalForce = (horizontalDir + Vector3.new(0, Config.Shout.VerticalBias, 0)).Unit * capped
 
 	return finalForce
 end
@@ -64,24 +69,30 @@ type TargetHit = {
 	Humanoid: Humanoid,
 	RootPart: BasePart,
 	IsPlayer: boolean,
-	Player: Player?
+	Player: Player?,
 }
 
 local function getTargetsInShape(origin: CFrame, casterModel: Model, range: number, coneAngle: number): { TargetHit }
 	local targets: { TargetHit } = {}
-	local originPos  = origin.Position
+	local originPos = origin.Position
 	local lookVector = origin.LookVector
-	local halfAngle  = math.rad(coneAngle)
+	local halfAngle = math.rad(coneAngle)
 
 	local function checkAndAdd(char: Model, isPlayer: boolean, ply: Player?)
-		if char == casterModel then return end
+		if char == casterModel then
+			return
+		end
 		local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
 		local hum = char:FindFirstChildOfClass("Humanoid") :: Humanoid?
-		if not hrp or not hum then return end
+		if not hrp or not hum then
+			return
+		end
 
 		local toTarget = (hrp.Position - originPos)
-		local dist     = toTarget.Magnitude
-		if dist > range then return end
+		local dist = toTarget.Magnitude
+		if dist > range then
+			return
+		end
 
 		local angle = math.acos(math.clamp(lookVector:Dot(toTarget.Unit), -1, 1))
 		if angle <= halfAngle then
@@ -90,35 +101,51 @@ local function getTargetsInShape(origin: CFrame, casterModel: Model, range: numb
 				Humanoid = hum,
 				RootPart = hrp,
 				IsPlayer = isPlayer,
-				Player = ply
+				Player = ply,
 			})
 		end
 	end
 
 	for _, player in ipairs(Players:GetPlayers()) do
-		if player.Character then checkAndAdd(player.Character, true, player) end
+		if player.Character then
+			checkAndAdd(player.Character, true, player)
+		end
 	end
 
 	for _, monster in ipairs(CollectionService:GetTagged("Monster")) do
-		if monster:IsA("Model") then checkAndAdd(monster, false, nil) end
+		if monster:IsA("Model") then
+			checkAndAdd(monster, false, nil)
+		end
 	end
 
 	return targets
 end
 
-function ShoutService.PerformShout(casterChar: Model, totalAtk: number, direction: Vector3, isMonster: boolean, casterUserId: number?, powerMult: number?, shoutTypeConfig: any)
+function ShoutService.PerformShout(
+	casterChar: Model,
+	totalAtk: number,
+	direction: Vector3,
+	isMonster: boolean,
+	casterUserId: number?,
+	powerMult: number?,
+	shoutTypeConfig: any
+)
 	local pMult = powerMult or 1.0
 	local hrp = casterChar:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not hrp then return 0 end
+	if not hrp then
+		return 0
+	end
 
-	if not isMonster and MapService and MapService.IsInSafeZone(hrp.Position) then return 0 end
+	if not isMonster and MapService and MapService.IsInSafeZone(hrp.Position) then
+		return 0
+	end
 
 	local originCFrame = CFrame.new(hrp.Position, hrp.Position + direction)
-	
+
 	local baseRange = shoutTypeConfig and shoutTypeConfig.Range or Config.Shout.KnockbackRange
 	local range = baseRange * math.pow(pMult, 0.45) -- Scale range by power (sqrt-ish)
 	local angle = shoutTypeConfig and shoutTypeConfig.Angle or Config.Shout.ConeAngle
-	
+
 	local targets = getTargetsInShape(originCFrame, casterChar, range, angle)
 	local hitCount = 0
 
@@ -127,15 +154,21 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 		local targetHRP = target.RootPart
 		local targetHum = target.Humanoid
 
-		if MapService and MapService.IsInSafeZone(targetHRP.Position) then continue end
-		if isMonster and not target.IsPlayer then continue end 
+		if MapService and MapService.IsInSafeZone(targetHRP.Position) then
+			continue
+		end
+		if isMonster and not target.IsPlayer then
+			continue
+		end
 
-		local totalDef = 10 
+		local totalDef = 10
 		local knockbackRes = 0
 
 		if target.IsPlayer and target.Player then
 			local targetData = DataService.GetData(target.Player) :: Types.PlayerData?
-			if targetData then totalDef = getTotalDefense(targetData) end
+			if targetData then
+				totalDef = getTotalDefense(targetData)
+			end
 		else
 			-- Lấy chỉ số thực tế của quái từ Attribute
 			totalDef = (targetCharAct:GetAttribute("Defense") :: number) or 10
@@ -149,10 +182,12 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 		if not target.IsPlayer then
 			targetCharAct:SetAttribute("LastDamagedBy", casterUserId)
 			targetHum:TakeDamage(damageTaken)
-			print("[ShoutService] HIT MONSTER:", targetCharAct.Name, "Damage:", damageTaken)
+			print(string.format("[ShoutService] HIT MONSTER: %s | Damage: %.1f", targetCharAct.Name, damageTaken))
 		else
-			targetHum:TakeDamage(damageTaken * 0.5) 
-			print("[ShoutService] HIT PLAYER:", targetCharAct.Name, "Damage:", damageTaken * 0.5)
+			-- Monster attacks on players are more punishing (1.5x), PvP is reduced (0.5x)
+			local finalDamage = if isMonster then math.max(1, damageTaken * 1.5) else damageTaken * 0.5
+			targetHum:TakeDamage(finalDamage)
+			print(string.format("[ShoutService] HIT PLAYER: %s | Damage: %.1f (Attacker isMonster: %s)", targetCharAct.Name, finalDamage, tostring(isMonster)))
 		end
 
 		Remotes.Events.KnockbackOccurred:FireAllClients(targetCharAct, force, damageTaken, casterUserId)
@@ -164,10 +199,10 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 			if hum.Health > 0 then
 				hum.AutoRotate = false
 				hum:ChangeState(Enum.HumanoidStateType.Physics)
-				
+
 				-- Giảm lực đẩy Y thêm vào (trước là 20) để quái không bay quá cao
 				targetHRP.AssemblyLinearVelocity = force + Vector3.new(0, 10, 0)
-				
+
 				task.delay(0.6, function()
 					if hum and hum.Parent and hum.Health > 0 then
 						hum.AutoRotate = true
@@ -180,8 +215,9 @@ function ShoutService.PerformShout(casterChar: Model, totalAtk: number, directio
 
 	if isMonster then
 		local sType = shoutTypeConfig and shoutTypeConfig.Id or "Normal"
-		Remotes.Events.MonsterShoutVFX:FireAllClients(CFrame.new(hrp.Position, hrp.Position + direction * 100), totalAtk, sType)
-		
+		local Refx = require(Shared.Refx)
+		Refx.Fire("MonsterShoutVFX", hrp.Position, direction * 100, totalAtk, sType)
+
 		if Config.Audio and Config.Audio.ShoutSFX and Config.Audio.ShoutSFX ~= "" then
 			local sound = Instance.new("Sound")
 			sound.SoundId = Config.Audio.ShoutSFX
@@ -198,13 +234,21 @@ end
 
 local function onShoutFired(caster: Player, direction: Vector3, powerMult: number?, slotIndex: number?)
 	-- powerMult sẽ được validate và clamp dựa trên timing bên dưới
-	if not caster.Character then return end
-	if direction.Magnitude < 0.01 then return end
+	if not caster.Character then
+		return
+	end
+	if direction.Magnitude < 0.01 then
+		return
+	end
 	direction = direction.Unit
 
-	if not DataService then return end
+	if not DataService then
+		return
+	end
 	local attackerData = DataService.GetData(caster) :: Types.PlayerData?
-	if not attackerData then return end
+	if not attackerData then
+		return
+	end
 
 	local sIndex = slotIndex or 0
 	local skillConfig: Types.SkillConfig? = nil
@@ -234,19 +278,21 @@ local function onShoutFired(caster: Player, direction: Vector3, powerMult: numbe
 			end
 		end
 	end
-	
+
 	if not skillConfig then
 		-- Fallback về skill đầu tiên nếu không tìm thấy
 		skillConfig = Config.Skills[1]
 	end
-	
+
 	local finalSkillConfig = skillConfig :: Types.SkillConfig
 
-	local now     = os.clock()
+	local now = os.clock()
 	local lastTime = ShoutCooldowns[caster.UserId .. "_" .. sIndex] or 0
 	local elapsedSinceLast = now - lastTime
-	if elapsedSinceLast < finalSkillConfig.Cooldown then return end
-	
+	if elapsedSinceLast < finalSkillConfig.Cooldown then
+		return
+	end
+
 	-- [SECURITY] Validate powerMult based on time since last shout
 	local chargeTimePossible = math.max(0, elapsedSinceLast - finalSkillConfig.Cooldown)
 	local maxMultPossible = 1.0
@@ -255,16 +301,26 @@ local function onShoutFired(caster: Player, direction: Vector3, powerMult: numbe
 			maxMultPossible = lvl.Mult
 		end
 	end
-	
+
 	local pMult = math.clamp(powerMult or 1.0, 1.0, maxMultPossible)
 	ShoutCooldowns[caster.UserId .. "_" .. sIndex] = now
 
 	local shoutTypeConfig = Config.ShoutTypes[finalSkillConfig.ShoutTypeId] or Config.ShoutTypes.Normal
 	local totalAtk = getTotalAttack(attackerData) * finalSkillConfig.DamageMult
-	
-	print("[ShoutService] Caster:", caster.Name, "Skill:", finalSkillConfig.DisplayName, "TotalAtk:", totalAtk, "pMult:", pMult)
-	
-	local hitCount = ShoutService.PerformShout(caster.Character, totalAtk, direction, false, caster.UserId, pMult, shoutTypeConfig)
+
+	print(
+		"[ShoutService] Caster:",
+		caster.Name,
+		"Skill:",
+		finalSkillConfig.DisplayName,
+		"TotalAtk:",
+		totalAtk,
+		"pMult:",
+		pMult
+	)
+
+	local hitCount =
+		ShoutService.PerformShout(caster.Character, totalAtk, direction, false, caster.UserId, pMult, shoutTypeConfig)
 
 	local vpGain = (Config.Shout.VocalPointsPerUse * pMult) * attackerData.RebirthMultiplier
 	if hitCount > 0 then
@@ -272,10 +328,10 @@ local function onShoutFired(caster: Player, direction: Vector3, powerMult: numbe
 	end
 
 	DataService.UpdateFields(caster, {
-		VocalPoints      = attackerData.VocalPoints + vpGain,
-		TotalVocalPoints = (attackerData.TotalVocalPoints or 0) + vpGain
+		VocalPoints = attackerData.VocalPoints + vpGain,
+		TotalVocalPoints = (attackerData.TotalVocalPoints or 0) + vpGain,
 	})
-	
+
 	local QuestService = require(script.Parent.QuestService)
 	QuestService.RegisterAction(caster, "Shout", 1)
 end
@@ -283,7 +339,7 @@ end
 Remotes.Events.ShoutFired.OnServerEvent:Connect(function(player: Player, ...)
 	local args = { ... }
 	local direction = args[1]
-	local pMult     = args[2]
+	local pMult = args[2]
 	local slotIndex = args[3]
 	if typeof(direction) == "Vector3" and type(pMult) == "number" then
 		onShoutFired(player, direction, pMult, type(slotIndex) == "number" and slotIndex or 1)

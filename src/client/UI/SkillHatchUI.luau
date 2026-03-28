@@ -9,10 +9,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local HatchUI = require(script.Parent:WaitForChild("HatchUI"))
+local Packages = ReplicatedStorage:WaitForChild("Packages")
+local Ripple = require(Packages:WaitForChild("Ripple"))
 
 local SkillHatchUI = {}
 
 local screen: ScreenGui? = nil
+
+-- Fallback for Ripple
+local createMotion = Ripple.createMotion or Ripple.create
 
 function SkillHatchUI.Init(overrideParent: Instance?)
 	screen = HatchUI.Init("SkillHatchUI", overrideParent)
@@ -35,14 +40,21 @@ function SkillHatchUI.PlayHatch(skillName: string, rarity: string)
 	vp.Position = UDim2.new(0.5, 0, 0.45, 0)
 	vp.AnchorPoint = Vector2.new(0.5, 0.5)
 	
-	-- For now, use a simple colored block or an icon part to represent the skill
 	local model = Instance.new("Part")
-	model.Size = Vector3.new(2, 3, 0.5)
+	model.Size = Vector3.new(2, 3, 0.1)
 	model.Color = Config.Theme.RarityColors[rarity] or Color3.fromRGB(255, 255, 255)
 	model.Material = Enum.Material.Glass
 	model.Parent = vp
 	
+	local baseCFrame = CFrame.new(0, 0, 0)
+	model.CFrame = baseCFrame
 	cam.CFrame = CFrame.new(Vector3.new(0, 0, 6), model.Position)
+
+	-- Ripple Motion
+	local shakeMotion = if createMotion then createMotion(baseCFrame) else nil
+	if shakeMotion and shakeMotion.spring then
+		shakeMotion:spring(baseCFrame, { frequency = 10, damping = 0.5 })
+	end
 
 	-- SFX: Shake
 	if Config.Audio and Config.Audio.EggShakeSFX then
@@ -52,11 +64,18 @@ function SkillHatchUI.PlayHatch(skillName: string, rarity: string)
 	-- Animation: Shake and Reveal
 	local startTime = os.clock()
 	local conn
-	conn = RunService.RenderStepped:Connect(function()
+	conn = RunService.RenderStepped:Connect(function(dt)
 		local elapsed = os.clock() - startTime
 		if elapsed < 1.5 then
 			-- Shaking
-			model.CFrame = CFrame.Angles(0, math.rad(elapsed * 360), 0) * CFrame.Angles(math.sin(elapsed * 50) * 0.1, 0, 0)
+			if shakeMotion then
+				if elapsed % 0.2 < 0.1 then
+					shakeMotion:impulse(CFrame.Angles(math.random(-10,10)*0.01, math.random(-10,10)*0.01, math.random(-10,10)*0.01))
+				end
+				model.CFrame = shakeMotion:step(dt)
+			else
+				model.CFrame = baseCFrame * CFrame.Angles(0, math.rad(elapsed * 360), 0) * CFrame.Angles(math.sin(elapsed * 50) * 0.1, 0, 0)
+			end
 		else
 			conn:Disconnect()
 			

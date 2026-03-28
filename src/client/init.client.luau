@@ -11,8 +11,16 @@ local _DataController = require(script.Controllers.DataController)
 local AudioController = require(script.Controllers.AudioController)
 AudioController.Init()
 
+local _AnimationController = require(script.Controllers:WaitForChild("AnimationController")) :: any
+-- AnimationController will auto-init on character added
+
 local _ShoutController = require(script.Controllers.ShoutController)
 local _DashController = require(script.Controllers.DashController)
+local ZoneController = require(script.Controllers.ZoneController)
+
+local MonsterController = require(script.Controllers.MonsterController)
+MonsterController.Init()
+ZoneController.Init()
 
 -- Layer 2: UI (sau data để subscribe đúng)
 local UIController = require(script.Controllers.UIController)

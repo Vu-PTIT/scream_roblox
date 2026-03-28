@@ -9,8 +9,10 @@ local Types   = require(Shared.Types)
 local Remotes = require(Shared.Remotes)
 
 local DataService: any = nil
+local QuestService: any = nil
 task.defer(function()
-	DataService = require(script.Parent.DataService)
+	DataService  = require(script.Parent.DataService)
+	QuestService = require(script.Parent.QuestService)
 end)
 
 local PetService = {}
@@ -89,6 +91,11 @@ local function onOpenEgg(player: Player, quantity: number)
 
 	-- Gửi kết quả về client để animation
 	Remotes.Events.EggOpenResult:FireClient(player, newPets :: any)
+
+	-- Register HatchEgg quest action
+	if QuestService then
+		QuestService.RegisterAction(player, "HatchEgg", quantity)
+	end
 
 	local rarityNames = {}
 	for _, p in ipairs(newPets) do
@@ -308,6 +315,55 @@ _Players.PlayerAdded:Connect(function(player: Player)
 		end
 	end)
 end)
+
+-- ============================================================
+-- PASSIVE VP COLLECTION (STANDING STILL WITH PETS)
+-- ============================================================
+local function startPassiveVPLoop()
+	task.spawn(function()
+		while true do
+			task.wait(Config.Shout.PassiveVPInterval or 1.0)
+			if not DataService then continue end
+			
+			for _, player in ipairs(_Players:GetPlayers()) do
+				local char = player.Character
+				local hum = char and char:FindFirstChildOfClass("Humanoid")
+				if not hum then continue end
+				
+				-- Check if standing still (MoveDirection magnitude < 0.01)
+				if hum.MoveDirection.Magnitude < 0.01 then
+					local data = DataService.GetData(player)
+					if not data then continue end
+					
+					-- Sum up pet multipliers (Sum mode, not product to keep it stable)
+					-- Wait, usually in these games it's a multiplier product but let's check ShoutService
+					-- In ShoutService line 29: petMult *= petData.Multiplier
+					
+					local petMult = 1
+					local hasEquipped = false
+					for _, pet in ipairs(data.Pets) do
+						if pet.Equipped then
+							petMult *= pet.Multiplier
+							hasEquipped = true
+						end
+					end
+					
+					if hasEquipped then
+						local vpGain = (Config.Shout.PassiveVPBase or 2) * petMult * data.RebirthMultiplier
+						
+						DataService.UpdateFields(player, {
+							VocalPoints = data.VocalPoints + vpGain,
+							TotalVocalPoints = (data.TotalVocalPoints or 0) + vpGain,
+						})
+					end
+				end
+			end
+		end
+	end)
+end
+
+-- Initialize Loop
+startPassiveVPLoop()
 
 _Players.PlayerRemoving:Connect(cleanupPets)
 
