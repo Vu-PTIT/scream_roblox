@@ -403,10 +403,10 @@ local function startPassiveVPLoop()
 					end
 					
 					-- Tổng hệ số
-					local petMult = 1 + petBonus
+					local petMult = math.min(1 + petBonus, 2.5)  -- passive cap thấp hơn
 					
 					if hasEquipped then
-						local vpGain = (Config.Shout.PassiveVPBase or 2) * petMult * data.RebirthMultiplier
+						local vpGain = (Config.Shout.PassiveVPBase or 2) * petMult
 						
 						DataService.UpdateFields(player, {
 							VocalPoints = data.VocalPoints + vpGain,

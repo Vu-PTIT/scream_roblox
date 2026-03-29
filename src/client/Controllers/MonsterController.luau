@@ -60,13 +60,27 @@ local function animateMonster(model: Model)
 		local attConn = model:GetAttributeChangedSignal("Dying"):Connect(onDyingChanged)
 		onDyingChanged() -- Kiểm tra luôn nếu nó đã chết khi client mới nhận được model
 
+		-- Procedural Movement Effects (Fake Walking)
+		local lastPos = hrp.Position
+		local walkCycle = 0
+		local renderConn = game:GetService("RunService").RenderStepped:Connect(function(dt)
+			if not model.Parent or model:GetAttribute("Dying") then return end
+			local velocity = (hrp.Position - lastPos).Magnitude / dt
+			lastPos = hrp.Position
+			
+			if velocity > 1 then
+				walkCycle += dt * velocity * 0.5
+				-- Pulse scale while walking to simulate 'stepping'
+				if scaleMotion then
+					scaleMotion:impulse(0.015 * math.sin(walkCycle * 4))
+				end
+			end
+		end)
+
 		model.Destroying:Connect(function()
-			if connection then
-				connection()
-			end
-			if attConn then
-				attConn:Disconnect()
-			end
+			renderConn:Disconnect()
+			if connection then connection() end
+			if attConn then attConn:Disconnect() end
 			activeMotions[model] = nil
 		end)
 	else

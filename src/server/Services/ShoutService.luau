@@ -26,14 +26,15 @@ local function getTotalAttack(data: Types.PlayerData): number
 	local upgradeCfg = Config.GetUpgrade("damage_1")
 	local upgradeBonus = data.DamageUpgradeLevel * (upgradeCfg and upgradeCfg.StatPerLevel or 5)
 
-	local petMult = 1
+	local petBonus = 0
 	for _, petData in ipairs(data.Pets) do
 		if petData.Equipped then
-			petMult *= petData.Multiplier
+			petBonus += (petData.Multiplier - 1)
 		end
 	end
+	local petMult = math.min(1 + petBonus, 3.0)  -- hard cap ×3
 
-	return (data.Attack + upgradeBonus) * data.RebirthMultiplier * petMult
+	return (data.Attack + upgradeBonus) * petMult
 end
 
 local function getTotalDefense(data: Types.PlayerData): number
@@ -329,9 +330,9 @@ local function onShoutFired(caster: Player, direction: Vector3, powerMult: numbe
 	local hitCount =
 		ShoutService.PerformShout(caster.Character, totalAtk, direction, false, caster.UserId, pMult, shoutTypeConfig)
 
-	local vpGain = (Config.Shout.VocalPointsPerUse * pMult) * attackerData.RebirthMultiplier
+	local vpGain = (Config.Shout.VocalPointsPerUse * pMult)
 	if hitCount > 0 then
-		vpGain += (Config.Shout.VocalPointsPerHit * hitCount * pMult) * attackerData.RebirthMultiplier
+		vpGain += (Config.Shout.VocalPointsPerHit * hitCount * pMult)
 	end
 
 	DataService.UpdateFields(caster, {

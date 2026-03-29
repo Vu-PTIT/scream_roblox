@@ -87,12 +87,6 @@ local Remotes = {
 	-- Payload: skillId: string, equipped: boolean, slotIndex: number?
 	SetSkillEquipped = Event("SetSkillEquipped"),
 
-	-- [Client → Server] Yêu cầu Rebirth
-	RebirthRequest = Event("RebirthRequest"),
-
-	-- [Server → Client] Kết quả rebirth (thành công / thất bại)
-	-- Payload: success: boolean, newMultiplier: number
-	RebirthResult = Event("RebirthResult"),
 
 	-- [Client → Server] Người chơi muốn đổi câu hét cá nhân
 	-- Payload: text: string (sẽ bị filter server-side)

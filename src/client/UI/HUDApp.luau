@@ -6,23 +6,22 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local React = require(ReplicatedStorage.Packages.React)
-local Shared = ReplicatedStorage.Shared
-local Config = require(Shared.Config)
+
 
 local PillLabel = require(script.Parent.components.PillLabel)
-local ProgressBar = require(script.Parent.components.ProgressBar)
+
 local SkillSlot = require(script.Parent.components.SkillSlot)
 local ModernButton = require(script.Parent.components.ModernButton)
 
 -- Controllers
 local DataController: any = nil
 local ShoutController: any = nil
-local _ShopApp: any = nil
+
 
 task.defer(function()
 	DataController = require(script.Parent.Parent.Controllers.DataController)
 	ShoutController = require(script.Parent.Parent.Controllers.ShoutController)
-	_ShopApp = require(script.Parent.ShopApp)
+
 end)
 
 type Props = {
@@ -35,7 +34,7 @@ local function HUDApp(props: Props)
 	
 	-- Fallback for initial data structure
 	if not data.Gold then data.Gold = 0 end
-	if not data.RebirthCount then data.RebirthCount = 0 end
+
 	if not data.VocalPoints then data.VocalPoints = 0 end
 	if not data.MaxHealth then data.MaxHealth = 100 end
 
@@ -84,7 +83,7 @@ local function HUDApp(props: Props)
 	local displayHealth = math.clamp(health, 0, maxHealth)
 	local hpPct = maxHealth > 0 and (displayHealth / maxHealth) or 0
 
-	local requiredVP = Config.Rebirth.VocalPointsRequired
+
 
 	local handleNavAction = function(id: string)
 		if props.HandleAction then
@@ -143,15 +142,6 @@ local function HUDApp(props: Props)
 					Height = 35,
 					LayoutOrder = 2,
 				}),
-				Rebirth = React.createElement(PillLabel, {
-					Icon = "⭐",
-					Text = string.format("%d", data.RebirthCount or 0),
-					TextColor = Color3.new(1, 1, 1),
-					BackgroundColor = Color3.fromRGB(40, 30, 50),
-					Width = 70,
-					Height = 35,
-					LayoutOrder = 3,
-				}),
 			}),
 
 			-- Health Bar - LayoutOrder 2
@@ -198,17 +188,7 @@ local function HUDApp(props: Props)
 				}),
 			}),
 
-			-- Rebirth Progress (Large) - LayoutOrder 1
-			Progress = React.createElement(ProgressBar, {
-				Title = "REBIRTH PROGRESS",
-				Icon = "📈",
-				Current = math.floor(data.TotalVocalPoints or 0),
-				Max = requiredVP,
-				Size = UDim2.new(0, 280, 0, 55),
-				Position = UDim2.new(0, 0, 0, 0),
-				AnchorPoint = Vector2.new(0, 0),
-				LayoutOrder = 1,
-			}),
+
 		}),
 
 		-- 2. BOTTOM CENTER: SKILLS ONLY

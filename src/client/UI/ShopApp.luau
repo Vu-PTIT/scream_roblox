@@ -10,7 +10,6 @@ local ShopUpgrade = require(script.Parent.components.ShopUpgrade)
 local PetInventory = require(script.Parent.components.PetInventory)
 local SkillInventory = require(script.Parent.components.SkillInventory)
 local QuestMenu = require(script.Parent.components.QuestMenu)
-local RebirthMenu = require(script.Parent.components.RebirthMenu)
 
 local ShopApp = {}
 
@@ -50,12 +49,7 @@ local function ShopAppComponent(props: ShopAppProps)
 			OnClose = props.OnClose,
 			Data = data,
 		})
-	elseif openWindow == "Rebirth" then
-		currentWindow = React.createElement(RebirthMenu, {
-			Visible = true,
-			OnClose = props.OnClose,
-			Data = data,
-		})
+
 	end
 
 	return React.createElement("ScreenGui", {
@@ -73,11 +67,5 @@ end
 
 ShopApp.Component = ShopAppComponent
 
--- Phương thức legacy cho các module không dùng React trực tiếp
--- (Nhưng thực tế sẽ gọi HandleAction của UIController)
-function ShopApp.OpenWindow(windowName: any)
-	local UIController = require(script.Parent.Parent.Controllers.UIController)
-	UIController.HandleAction(windowName)
-end
 
 return ShopApp

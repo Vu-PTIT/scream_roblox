@@ -11,7 +11,6 @@ local Shared = game.ReplicatedStorage.Shared
 local Config = require(Shared.Config)
 local Types = require(Shared.Types)
 local Remotes = require(Shared.Remotes)
-local SimplePath = require(Shared.SimplePath)
 
 local DataService: any = nil
 task.defer(function()
@@ -36,11 +35,14 @@ type MonsterInstance = {
 	IsAlive: boolean,
 	LastAttackTime: number,
 	State: MonsterAIState,
-	SimplePath: any,
+
 	SpawnPos: Vector3,
 	ZoneCenter: Vector3,
 	ZoneSize: Vector3,
 	LastUpdate: number,
+	TargetPos: Vector3?,
+	LastPosition: Vector3,
+	StuckTime: number,
 }
 
 local ActiveMonsters: { [Model]: MonsterInstance } = {}
@@ -356,11 +358,7 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 		hrp:SetNetworkOwner(nil)
 	end
 
-	local path = SimplePath.new(model, {
-		AgentRadius = hrp.Size.X / 2 + 1,
-		AgentHeight = hrp.Size.Y + 1,
-		AgentCanJump = if humanoid then true else false,
-	})
+
 
 	local instance: MonsterInstance = {
 		Model = model,
@@ -369,11 +367,13 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 		IsAlive = true,
 		LastAttackTime = 0,
 		State = "IDLE",
-		SimplePath = path,
 		SpawnPos = spawnPos,
 		ZoneCenter = zoneCenter,
 		ZoneSize = Vector3.new(zoneSizeX, 0, zoneSizeZ),
 		LastUpdate = 0,
+		TargetPos = nil,
+		LastPosition = spawnPos,
+		StuckTime = 0,
 	}
 
 	ActiveMonsters[model] = instance
@@ -488,10 +488,27 @@ function MonsterService.Init()
 				continue
 			end
 
-			-- 2. AI Logic (Simplified from the original per-monster loop)
-			local path = instance.SimplePath
+			-- 2. Stuck Detection & Auto-Jump
+			local distMoved = (hrp.Position - instance.LastPosition).Magnitude
+			local isIdle = (instance.State :: string) == "IDLE"
+			local isAttack = (instance.State :: string) == "ATTACK"
+			
+			if not isIdle and not isAttack then
+				if distMoved < 0.2 then
+					instance.StuckTime += updateRate
+					if instance.StuckTime > 0.5 then
+						humanoid.Jump = true
+						instance.StuckTime = 0
+					end
+				else
+					instance.StuckTime = 0
+				end
+			end
+			instance.LastPosition = hrp.Position
+
+			-- 3. AI Logic
 			if humanoid.PlatformStand then
-				path:Stop()
+				humanoid:MoveTo(hrp.Position) 
 				continue
 			end
 
@@ -503,30 +520,21 @@ function MonsterService.Init()
 			local flatPos = Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
 			local flatCenter = Vector3.new(zoneCenter.X, 0, zoneCenter.Z)
 			local distFromZoneCenter = (flatPos - flatCenter).Magnitude
-			local leashRange = (math.max(zoneSizeX, zoneSizeZ) / 2) + 15 -- Radius + 15 stud buffer
+			local leashRange = (math.max(zoneSizeX, zoneSizeZ) / 2) + 20
 
 			if distFromZoneCenter > leashRange then
-				if instance.State ~= "RETURN" then
-					print(
-						string.format(
-							"[MonsterService] LEASHING: %s (Dist: %.1f > Max: %.1f)",
-							model.Name,
-							distFromZoneCenter,
-							leashRange
-						)
-					)
-				end
 				instance.State = "RETURN"
 			end
 
-			-- State-based filtering: Can we aggro?
+			-- canAggro check
 			local canAggro = true
 			local distFromSpawn = (hrp.Position - instance.SpawnPos).Magnitude
 			if instance.State == "RETURN" then
-				if distFromSpawn > 8 then -- Must get back within 8 studs of spawn point
+				if distFromSpawn > 5 then
 					canAggro = false
 				else
-					instance.State = "IDLE" -- Successfully returned
+					instance.State = "IDLE"
+					instance.TargetPos = nil
 				end
 			end
 
@@ -538,64 +546,53 @@ function MonsterService.Init()
 
 					if distToTarget <= attackRange then
 						instance.State = "ATTACK"
-						path:Stop()
+						humanoid:MoveTo(hrp.Position)
+						instance.TargetPos = nil
 						humanoid.AutoRotate = false
 
-						local dir = (targetHrp.Position - hrp.Position).Unit
-						local targetCFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
-						hrp.CFrame = hrp.CFrame:Lerp(targetCFrame, 0.2)
+						-- Smooth Rotation for Attack
+						local lookDir = (targetHrp.Position - hrp.Position).Unit
+						local targetCF = CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(lookDir.X, 0, lookDir.Z))
+						hrp.CFrame = hrp.CFrame:Lerp(targetCF, 0.3)
 
 						if now - instance.LastAttackTime >= 3.0 then
 							instance.LastAttackTime = now
-							TweenService:Create(
-								hrp,
-								TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true),
-								{ Color = Color3.new(1, 0, 0) }
-							):Play()
+							TweenService:Create(hrp, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), { Color = Color3.new(1, 0, 0) }):Play()
 							task.delay(0.6, function()
-								if not instance.IsAlive or not model.Parent then
-									return
-								end
-								local shoutType = if instance.Config.IsBoss
-										and instance.CurrentHP < instance.Config.MaxHP * 0.5
-									then Config.ShoutTypes.Circular
-									else Config.ShoutTypes.Normal
+								if not instance.IsAlive or not model.Parent then return end
+								local shoutType = if instance.Config.IsBoss and instance.CurrentHP < instance.Config.MaxHP * 0.5 then Config.ShoutTypes.Circular else Config.ShoutTypes.Normal
 								local ShoutService = require(script.Parent.ShoutService)
-								ShoutService.PerformShout(model, instance.Config.Attack, dir, true, nil, nil, shoutType)
+								ShoutService.PerformShout(model, instance.Config.Attack, lookDir, true, nil, nil, shoutType)
 							end)
 						end
 					else
 						instance.State = "CHASE"
+						instance.TargetPos = nil
 						humanoid.AutoRotate = true
-						path:Run(targetHrp.Position)
+						humanoid:MoveTo(targetHrp.Position)
 					end
 				end
 			else
 				-- Idle / Wander / Return
 				if instance.State == "RETURN" then
 					humanoid.AutoRotate = true
-					path:Run(instance.SpawnPos)
-					if (hrp.Position - instance.SpawnPos).Magnitude < 5 then
-						instance.State = "IDLE"
-					end
+					humanoid:MoveTo(instance.SpawnPos)
 				elseif instance.State == "WANDER" then
 					humanoid.AutoRotate = true
-					local randomPos = zoneCenter
-						+ Vector3.new(
-							math.random(-zoneSizeX / 2 + 10, zoneSizeX / 2 - 10),
-							0,
-							math.random(-zoneSizeZ / 2 + 10, zoneSizeZ / 2 - 10)
-						)
-					path:Run(randomPos)
-					if (hrp.Position - randomPos).Magnitude < 5 then
-						instance.State = "IDLE"
+					if not instance.TargetPos then
+						instance.TargetPos = zoneCenter + Vector3.new(math.random(-zoneSizeX/2 + 10, zoneSizeX/2 - 10), 0, math.random(-zoneSizeZ/2 + 10, zoneSizeZ/2 - 10))
 					end
-				else -- IDLE, CHASE, ATTACK (when target lost)
-					if math.random() > 0.95 then
+					humanoid:MoveTo(instance.TargetPos :: Vector3)
+					if (hrp.Position - (instance.TargetPos :: Vector3)).Magnitude < 5 then
+						instance.State = "IDLE"
+						instance.TargetPos = nil
+					end
+				else
+					if math.random() > 0.98 then -- Lower wander chance
 						instance.State = "WANDER"
 					else
 						instance.State = "IDLE"
-						path:Stop()
+						humanoid:MoveTo(hrp.Position)
 					end
 				end
 			end

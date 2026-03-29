@@ -56,7 +56,7 @@ end
 
 local function UIAppComponent(_props: any)
 	local bagOpen, setBagOpen = React.useState(false)
-	local openWindow, setOpenWindow = React.useState(nil :: string?)
+	local openWindow: string?, setOpenWindow = React.useState(nil)
 	local data, setData = React.useState({})
 
 	-- Cung cấp handler ra ngoài để UIController.HandleAction dùng được
@@ -68,7 +68,7 @@ local function UIAppComponent(_props: any)
 				setOpenWindow(nil)
 				setBagOpen(newState)
 				print("[UIAppComponent] Set BagOpen to:", newState)
-			elseif id == "Shop" or id == "Pet" or id == "Skill" or id == "Quest" or id == "Rebirth" or id == "Pets" or id == "Skills" then
+			elseif id == "Shop" or id == "Pet" or id == "Skill" or id == "Quest" or id == "Pets" or id == "Skills" then
 				setBagOpen(false)
 				local target = id
 				if id == "Pets" then target = "Pet"
@@ -76,12 +76,9 @@ local function UIAppComponent(_props: any)
 				elseif id == "Shop" then target = "Shop"
 				end
 				
-				-- Toggle logic: Nếu đang mở đúng loại đó thì đóng lại
-				if openWindow == target then
-					setOpenWindow(nil)
-				else
-					setOpenWindow(target)
-				end
+				setOpenWindow(function(prev)
+					if prev == target then return nil else return target end
+				end)
 				print("[UIAppComponent] Set OpenWindow to:", target or "nil")
 			elseif id == "CloseAll" then
 				setBagOpen(false)
@@ -99,7 +96,7 @@ local function UIAppComponent(_props: any)
 			end
 		end
 		return function() _uiEventHandler = nil end
-	end, {bagOpen, openWindow})
+	end, {bagOpen})
 
 	-- Unified Data Listener
 	React.useEffect(function()
@@ -158,7 +155,6 @@ local function bindProximityPrompts()
 				if pName:find("Skill") then stationId = "Skill"
 				elseif pName:find("Pet") then stationId = "Pet"
 				elseif pName:find("Upgrade") or pName:find("Shop") then stationId = "Shop"
-				elseif pName:find("Rebirth") then stationId = "Rebirth"
 				elseif pName:find("Quest") then stationId = "Quest"
 				elseif pName:find("Reward") then stationId = "Reward"
 				elseif pName:find("Speech") or pName:find("Shout") then stationId = "Shout"
@@ -185,7 +181,6 @@ local function bindClickDetectors()
 					if pName:find("Skill") then stationId = "Skill"
 					elseif pName:find("Pet") then stationId = "Pet"
 					elseif pName:find("Upgrade") or pName:find("Shop") then stationId = "Shop"
-					elseif pName:find("Rebirth") then stationId = "Rebirth"
 					elseif pName:find("Quest") then stationId = "Quest"
 					elseif pName:find("Reward") then stationId = "Reward"
 					elseif pName:find("Speech") or pName:find("Shout") then stationId = "Shout"

@@ -139,33 +139,20 @@ local function createZone(zoneName: string, config: any, color: Color3, material
 	end
 end
 
--- Tạo các khu vực Rebirth
--- Tạo các khu vực Rebirth
-local function createRebirthAreas()
-	local mapFolder = workspace:FindFirstChild("Map")
-	if not mapFolder then
-		return
-	end
-	local rebirthZonesFolder = mapFolder:FindFirstChild("RebirthZones")
-	if not rebirthZonesFolder then
-		rebirthZonesFolder = Instance.new("Folder")
-		rebirthZonesFolder.Name = "RebirthZones"
-		rebirthZonesFolder.Parent = mapFolder
-	end
 
+-- Tạo các khu vực Zone (mở tất cả - không cần Rebirth)
+local function createZoneAreas()
 	local areas: { any } = {
 		{
 			Name = "Desert",
-			Req = 1,
 			Color = Color3.fromRGB(244, 164, 96),
 			Pos = Vector3.new(0, 0, -200),
 			Material = Enum.Material.Sand,
 			VFX = "Desert",
-			MusicId = "rbxassetid://1837618405", -- Example action music
+			MusicId = "rbxassetid://1837618405",
 		},
 		{
 			Name = "IceZone",
-			Req = 3,
 			Color = Color3.fromRGB(173, 216, 230),
 			Pos = Vector3.new(0, 0, -400),
 			Material = Enum.Material.Ice,
@@ -173,7 +160,6 @@ local function createRebirthAreas()
 		},
 		{
 			Name = "VoidRealm",
-			Req = 7,
 			Color = Color3.fromRGB(30, 0, 50),
 			Pos = Vector3.new(0, 0, -600),
 			Material = Enum.Material.CorrodedMetal,
@@ -181,7 +167,6 @@ local function createRebirthAreas()
 		},
 		{
 			Name = "HeavenlyStage",
-			Req = 15,
 			Color = Color3.fromRGB(255, 255, 230),
 			Pos = Vector3.new(0, 0, -800),
 			Material = Enum.Material.Neon,
@@ -189,7 +174,6 @@ local function createRebirthAreas()
 		},
 	}
 
-	-- Hàm hỗ trợ tạo hiệu ứng môi trường
 	local function applyAreaVFX(base: Part, vfxType: string)
 		if vfxType == "Desert" then
 			local emitter = Instance.new("ParticleEmitter")
@@ -216,13 +200,10 @@ local function createRebirthAreas()
 			emitter.Lifetime = NumberRange.new(5, 8)
 			emitter.Rate = 40
 			emitter.Speed = NumberRange.new(10, 20)
-			emitter.Acceleration = Vector3.new(0, -5, 0) -- Rơi xuống
+			emitter.Acceleration = Vector3.new(0, -5, 0)
 			emitter.EmissionDirection = Enum.NormalId.Top
 			emitter.SpreadAngle = Vector2.new(180, 180)
-			-- Cho xuất hiện ngẫu nhiên bên trên zone
 			emitter.Parent = base
-
-			-- Thêm chút sương mù cục bộ (Fog part)
 			local fogPart = Instance.new("Part")
 			fogPart.Name = "LocalFog"
 			fogPart.Size = base.Size + Vector3.new(0, 40, 0)
@@ -273,8 +254,6 @@ local function createRebirthAreas()
 		end
 	end
 
-	local blockedGates = {}
-
 	for _, area in ipairs(areas) do
 		local zoneFolder = workspace:FindFirstChild(area.Name)
 		if not zoneFolder then
@@ -292,191 +271,24 @@ local function createRebirthAreas()
 		floor.Material = area.Material or Enum.Material.Sand
 		floor.Parent = zoneFolder
 
-		-- Apply visual effects
 		if area.VFX then
 			applyAreaVFX(floor, area.VFX)
 		end
-		
-		-- Integration: Add MusicZone tag and MusicId attribute
+
 		if (area :: any).MusicId then
 			floor:SetAttribute("MusicId", (area :: any).MusicId)
 			CollectionService:AddTag(floor, ZoneTypes.Tags.MusicZone)
 		end
-
-		local blocker = Instance.new("Part")
-		blocker.Name = area.Name .. "_Gate"
-		blocker.Size = Vector3.new(150, 20, 5)
-		blocker.Position = area.Pos + Vector3.new(0, 10, 75)
-		blocker.Anchored = true
-		blocker.CanCollide = false
-		blocker.Transparency = 0.5
-		blocker.Color = Color3.fromRGB(255, 50, 50)
-		blocker.Material = Enum.Material.Neon
-		blocker.Parent = rebirthZonesFolder
-
-		local gui = Instance.new("SurfaceGui")
-		gui.Face = Enum.NormalId.Front
-		gui.Parent = blocker
-		local txt = Instance.new("TextLabel")
-		txt.Size = UDim2.new(1, 0, 1, 0)
-		txt.BackgroundTransparency = 1
-		txt.Text = area.Name .. "\nRequires " .. area.Req .. " Rebirths"
-		txt.TextScaled = true
-		txt.TextColor3 = Color3.new(1, 1, 1)
-		txt.Font = Enum.Font.GothamBold
-		txt.Parent = gui
-
-		table.insert(blockedGates, {
-			Req = area.Req,
-			Name = area.Name,
-			MinZ = area.Pos.Z - 75,
-			MaxZ = blocker.Position.Z + 2,
-			MinX = blocker.Position.X - (blocker.Size.X / 2),
-			MaxX = blocker.Position.X + (blocker.Size.X / 2),
-			PushBackTarget = blocker.Position + Vector3.new(0, 0, 15), -- 15 studs before the gate
-		})
-	end
-
-	-- Setup ZonePlus for Rebirth Gates
-	for _, gate in ipairs(blockedGates) do
-		local zonePart = rebirthZonesFolder:FindFirstChild(gate.Name .. "_Gate") :: BasePart?
-		if zonePart then
-			-- Create a volume for the restricted area (extending into the zone)
-			local triggerPart = Instance.new("Part")
-			triggerPart.Name = gate.Name .. "_Trigger"
-			triggerPart.Anchored = true
-			triggerPart.CanCollide = false
-			triggerPart.Transparency = 1
-			-- Size covers the whole Z-range of the restricted zone
-			triggerPart.Size = Vector3.new(gate.MaxX - gate.MinX, 20, gate.MaxZ - gate.MinZ)
-			triggerPart.Position = Vector3.new((gate.MinX + gate.MaxX) / 2, 10, (gate.MinZ + gate.MaxZ) / 2)
-			triggerPart.Parent = rebirthZonesFolder
-
-			local zone = ZonePlus.new(triggerPart)
-			zone.playerEntered:Connect(function(player)
-				local char = player.Character
-				local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-				if not hrp then return end
-
-				local data = DataService.GetData(player)
-				if data and data.RebirthCount < gate.Req then
-					-- Kick back
-					hrp.CFrame = CFrame.new(gate.PushBackTarget.X, hrp.Position.Y, gate.PushBackTarget.Z) * hrp.CFrame.Rotation
-					
-					local lastNotif = player:GetAttribute("LastRebirthNotif_" .. gate.Name) or 0
-					if os.clock() - lastNotif > 2 then
-						player:SetAttribute("LastRebirthNotif_" .. gate.Name, os.clock())
-						local Remotes = game.ReplicatedStorage.Shared.Remotes
-						Remotes.Events.Notification:FireClient(player, "❌ Cần " .. gate.Req .. " Rebirth để vào khu vực " .. gate.Name .. "!")
-					end
-				end
-			end)
-		end
 	end
 end
 
--- Tạo các khu vực Boss Gates
+-- Boss Room Gates (không còn giới hạn Rebirth — chỉ tạo floor)
 local function createBossRoomGates()
-	local mapFolder = workspace:FindFirstChild("Map")
-	if not mapFolder then
-		return
-	end
-	local gatesFolder = mapFolder:FindFirstChild("BossGates")
-	if not gatesFolder then
-		gatesFolder = Instance.new("Folder")
-		gatesFolder.Name = "BossGates"
-		gatesFolder.Parent = mapFolder
-	end
-
-	local bossAreas = {
-		{
-			Name = "BossRoom",
-			Req = 1,
-			Pos = Vector3.new(-200, 0, 0),
-			Size = Vector3.new(150, 1, 150),
-			Dir = Vector3.new(1, 0, 0),
-		},
-		{
-			Name = "IceBossRoom",
-			Req = 5,
-			Pos = Vector3.new(-400, 0, 0),
-			Size = Vector3.new(150, 1, 150),
-			Dir = Vector3.new(1, 0, 0),
-		},
-	}
-
-	local blockedGates = {}
-
-	for _, area in ipairs(bossAreas) do
-		local blocker = Instance.new("Part")
-		blocker.Name = area.Name .. "_Gate"
-		blocker.Size = Vector3.new(5, 20, area.Size.Z) -- Tường chắn song song trục Z
-		blocker.Position = area.Pos + Vector3.new(area.Size.X / 2, 10, 0) -- Nằm rìa bên phải của zone
-		blocker.Anchored = true
-		blocker.CanCollide = false
-		blocker.Transparency = 0.5
-		blocker.Color = Color3.fromRGB(255, 50, 50)
-		blocker.Material = Enum.Material.Neon
-		blocker.Parent = gatesFolder
-
-		local gui = Instance.new("SurfaceGui")
-		gui.Face = Enum.NormalId.Right
-		gui.Parent = blocker
-		local txt = Instance.new("TextLabel")
-		txt.Size = UDim2.new(1, 0, 1, 0)
-		txt.BackgroundTransparency = 1
-		txt.Text = "Requires " .. area.Req .. " Rebirths"
-		txt.TextScaled = true
-		txt.TextColor3 = Color3.new(1, 1, 1)
-		txt.Font = Enum.Font.GothamBold
-		txt.Parent = gui
-
-		table.insert(blockedGates, {
-			Req = area.Req,
-			Name = area.Name,
-			-- Vùng bị cấm: Kéo từ vị trí trung tâm boss room đến rìa phải trừ hao
-			MinX = area.Pos.X - (area.Size.X / 2),
-			MaxX = blocker.Position.X + 2,
-			MinZ = area.Pos.Z - (area.Size.Z / 2),
-			MaxZ = area.Pos.Z + (area.Size.Z / 2),
-			PushBackTarget = blocker.Position + Vector3.new(15, 0, 0), -- 15 studs dội ngược lại
-		})
-	end
-
-	-- Setup ZonePlus for Boss Gates
-	for _, gate in ipairs(blockedGates) do
-		local zonePart = gatesFolder:FindFirstChild(gate.Name .. "_Gate") :: BasePart?
-		if zonePart then
-			local triggerPart = Instance.new("Part")
-			triggerPart.Name = gate.Name .. "_Trigger"
-			triggerPart.Anchored = true
-			triggerPart.CanCollide = false
-			triggerPart.Transparency = 1
-			triggerPart.Size = Vector3.new(gate.MaxX - gate.MinX, 20, gate.MaxZ - gate.MinZ)
-			triggerPart.Position = Vector3.new((gate.MinX + gate.MaxX) / 2, 10, (gate.MinZ + gate.MaxZ) / 2)
-			triggerPart.Parent = gatesFolder
-
-			local zone = ZonePlus.new(triggerPart)
-			zone.playerEntered:Connect(function(player)
-				local char = player.Character
-				local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-				if not hrp then return end
-
-				local data = DataService.GetData(player)
-				if data and data.RebirthCount < gate.Req then
-					hrp.CFrame = CFrame.new(gate.PushBackTarget.X, hrp.Position.Y, gate.PushBackTarget.Z) * hrp.CFrame.Rotation
-					
-					local lastNotif = player:GetAttribute("LastRebirthNotif_" .. gate.Name) or 0
-					if os.clock() - lastNotif > 2 then
-						player:SetAttribute("LastRebirthNotif_" .. gate.Name, os.clock())
-						local Remotes = game.ReplicatedStorage.Shared.Remotes
-						Remotes.Events.Notification:FireClient(player, "❌ Cần " .. gate.Req .. " Rebirth để vào khu vực " .. gate.Name .. "!")
-					end
-				end
-			end)
-		end
-	end
+	-- Boss rooms đã được tạo bởi createZone() trong Init()
+	-- Không cần gate hay điều kiện Rebirth nữa
 end
+
+
 
 -- Tạo các trạm chức năng (Nâng cấp, Pet, Rebirth)
 local function createStations()
@@ -505,12 +317,6 @@ local function createStations()
 			name = "Pet Station",
 			color = Color3.fromRGB(255, 200, 50),
 			posOffset = Vector3.new(-20, 2, -15),
-		},
-		{
-			id = "Rebirth",
-			name = "Rebirth Station",
-			color = Color3.fromRGB(150, 50, 200),
-			posOffset = Vector3.new(0, 2, 25),
 		},
 		{
 			id = "Skill",
@@ -671,7 +477,7 @@ function MapService.Init()
 		createZone("IceBossRoom", Config.Map.IceBossRoom, Color3.fromRGB(173, 216, 230), Enum.Material.Ice)
 	end
 
-	createRebirthAreas()
+	createZoneAreas()
 	createBossRoomGates()
 	createStations()
 	createLeaderboardBoard()

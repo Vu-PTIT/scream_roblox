@@ -43,9 +43,6 @@ export type PlayerData = {
 	Defense: number,          -- Độ chịu đựng (giảm knockback nhận)
 	MaxHealth: number,        -- Máu tối đa
 
-	-- Rebirth
-	RebirthCount: number,
-	RebirthMultiplier: number, -- Hệ số nhân tổng (áp dụng vào VocalPoints gain)
 
 	-- Upgrades (level đã mua)
 	DamageUpgradeLevel: number,   -- Cấp Sát thương (Microphone/Speaker)
@@ -155,7 +152,6 @@ export type ThemeConfig = {
 	PrimaryGradient: { Color3 },
 	SecondaryGradient: { Color3 },
 	SuccessGradient: { Color3 },
-	RebirthGradient: { Color3 },
 	TextMain: Color3,
 	TextSecondary: Color3,
 	TextMuted: Color3,

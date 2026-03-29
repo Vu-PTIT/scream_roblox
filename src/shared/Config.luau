@@ -18,8 +18,6 @@ local defaultData: Types.PlayerData = {
 	Attack = 10,
 	Defense = 10,
 	MaxHealth = 100,
-	RebirthCount = 0,
-	RebirthMultiplier = 1,
 	DamageUpgradeLevel = 0,
 	HealthUpgradeLevel = 0,
 	ArmorUpgradeLevel = 0,
@@ -181,7 +179,7 @@ local upgradesData: { Types.UpgradeConfig } = {
 		Category = "Attack",
 		BaseCost = 50,
 		CostScaling = 1.3,
-		StatPerLevel = 5,
+	StatPerLevel = 15, -- (tăng từ 5 để bù progression không có rebirth)
 		MaxLevel = 30,
 		Icon = "rbxassetid://5905055047",
 	},
@@ -217,20 +215,6 @@ function Config.GetUpgrade(id: string): Types.UpgradeConfig?
 	end
 	return nil
 end
-
--- ============================================================
--- REBIRTH
--- ============================================================
-Config.Rebirth = {
-	VocalPointsRequired = 10000, -- điểm cần thiết để rebirth
-	MultiplierPerRebirth = 0.25, -- +25% mỗi lần rebirth (cộng dồn)
-	AreaUnlockThresholds = { -- mở khu vực mới khi đạt rebirth count
-		[1] = "Desert",
-		[3] = "IceZone",
-		[7] = "VoidRealm",
-		[15] = "HeavenlyStage",
-	},
-}
 
 -- ============================================================
 -- PETS
@@ -288,15 +272,15 @@ local gachaWeights: { [string]: number } = {
 }
 Config.PetGachaWeights = gachaWeights
 
-Config.EggCostGold = 500 -- chi phí mở 1 trứng
+Config.EggCostGold = 7500 -- chi phí mở 1 trứng
 
 -- Giá bán pet thừa (vàng nhận được khi bán)
--- Legendary = đúng bằng giá mở 1 trứng (500)
+-- Legendary = đúng bằng giá mở 1 trứng (7500)
 Config.PetSellPrices = {
-	Common    = 15,   -- 3% giá trứng
-	Rare      = 50,   -- 10% giá trứng
-	Epic      = 125,  -- 25% giá trứng
-	Legendary = 500,  -- 1 lần mở trứng
+	Common    = 375,   -- 5% giá trứng
+	Rare      = 1125,  -- 15% giá trứng
+	Epic      = 3000,  -- 40% giá trứng
+	Legendary = 7500,  -- 1 lần mở trứng
 }
 
 -- ============================================================
@@ -428,15 +412,15 @@ Config.SkillGachaWeights = {
 	Legendary = 5,
 }
 
-Config.SkillScrollCost = 1000 -- chi phí mở 1 cuộn skill
+Config.SkillScrollCost = 15000 -- chi phí mở 1 cuộn skill
 
 -- Giá bán skill thừa (vàng nhận được khi bán)
--- Legendary = đúng bằng giá mở 1 cuộn skill (SkillScrollCost = 1000)
+-- Legendary = đúng bằng giá mở 1 cuộn skill (SkillScrollCost = 15000)
 Config.SkillSellPrices = {
-	Common    = 50,   -- 5% giá cuộn
-	Rare      = 200,  -- 20% giá cuộn
-	Epic      = 500,  -- 50% giá cuộn
-	Legendary = 1000, -- = 1 lần mở cuộn (SkillScrollCost)
+	Common    = 750,   -- 5% giá cuộn
+	Rare      = 2250,  -- 15% giá cuộn
+	Epic      = 6000,  -- 40% giá cuộn
+	Legendary = 15000, -- = 1 lần mở cuộn (SkillScrollCost)
 }
 
 -- ============================================================
@@ -943,7 +927,7 @@ Config.Localization = {
 	},
 	Rebirth = {
 		Title = "⭐ REBIRTH",
-		Desc = "Confirm Rebirth? You will reset your Vocal Points and Upgrades, but keep your Pets and gain a permanent multiplier!",
+		Desc = "Rebirth has been removed.",
 		CurrentMult = "Current Multiplier: x%.2f",
 		NewMult = "New Multiplier: x%.2f",
 		Confirm = "REBIRTH",
@@ -1020,7 +1004,6 @@ Config.Theme = {
 	PrimaryGradient = { Color3.fromRGB(100, 180, 255), Color3.fromRGB(60, 120, 255) },
 	SecondaryGradient = { Color3.fromRGB(255, 180, 60), Color3.fromRGB(200, 130, 40) },
 	SuccessGradient = { Color3.fromRGB(80, 220, 160), Color3.fromRGB(40, 180, 120) },
-	RebirthGradient = { Color3.fromRGB(255, 80, 100), Color3.fromRGB(200, 50, 70) },
 	SkillGradient = { Color3.fromRGB(180, 100, 255), Color3.fromRGB(140, 70, 220) },
 
 	-- Button Base Styles (Modernized)

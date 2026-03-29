@@ -196,9 +196,7 @@ local function BagUI(props: { Visible: boolean, OnClose: () -> (), Data: any })
 				{ Label = "Attack Power", Value = tostring(math.floor(totalAtk)), Icon = "⚔️", Color = Color3.fromRGB(255, 100, 100) },
 				{ Label = "Defense", Value = tostring(math.floor(totalDef)), Icon = "🛡️", Color = Color3.fromRGB(100, 255, 100) },
 				{ Label = "Max Health", Value = tostring(math.floor(data.MaxHealth or 100)), Icon = "❤️", Color = Color3.fromRGB(255, 150, 150) },
-				{ Label = "Rebirth Mod", Value = "x" .. string.format("%.2f", data.RebirthMultiplier or 1), Icon = "📈", Color = Color3.fromRGB(255, 200, 50) },
 				{ Label = "Vocal Points", Value = string.format("%d", data.VocalPoints or 0), Icon = "🎙️", Color = Color3.fromRGB(100, 200, 255) },
-				{ Label = "Rebirths", Value = tostring(data.RebirthCount or 0), Icon = "⭐", Color = Color3.new(1, 1, 1) },
 			}
 
 			return React.createElement("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1 }, {
