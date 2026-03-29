@@ -1,8 +1,16 @@
---!strict
 -- init.server.luau
 -- Server Entry Point: Khởi động tất cả Services theo thứ tự phụ thuộc
 
 print("=== [ShoutSimulator] Server Initializing... ===")
+
+-- FIX: Xoá ZonePlusReference nếu tồn tại (từ Plugin context trong Studio) 
+-- Để tránh lỗi "Requested module was required recursively"
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local zpRef = replicatedStorage:FindFirstChild("ZonePlusReference")
+if zpRef then
+	zpRef:Destroy()
+	print("✔️ [ZonePlus] Cleared stale Reference from Studio Plugin.")
+end
 
 -- Layer 0: DataService trước tiên (các service khác depend vào nó)
 local _DataService = require(script.Services.DataService)

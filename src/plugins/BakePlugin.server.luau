@@ -1,5 +1,5 @@
 -- BakePlugin.server.luau
--- VERSION: 2.1 (CLEAN ASCII)
+-- VERSION: 3.0 (Studio-First Workflow)
 print("[Goku Plugin] Initializing...");
 
 local RunService = game:GetService("RunService");
@@ -19,72 +19,26 @@ if not RunService:IsEdit() then return end;
 
 -- Create Toolbar and Buttons
 local toolbar = plugin:CreateToolbar("Goku Tools");
-local bakeButton = toolbar:CreateButton("Bake All", "Bake everything", "rbxassetid://4458901886");
-local cleanButton = toolbar:CreateButton("Master Clean", "Clean everything", "rbxassetid://4458901571");
-local exportButton = toolbar:CreateButton("Export Config", "Export Map Config to Output", "rbxassetid://4458901404");
+local bakeButton = toolbar:CreateButton("Bake UI", "Refresh UI Components and Map Logic", "rbxassetid://4458901886");
 
 local function runFullLogic()
     local ServerScriptService = game:GetService("ServerScriptService");
     local StarterGui = game:GetService("StarterGui");
     local StarterPlayer = game:GetService("StarterPlayer");
-    local Workspace = game.Workspace;
-
-    exportButton.Click:Connect(function()
-        local map = Workspace:FindFirstChild("Map")
-        if not map then warn("[Goku Plugin] No Map folder found to export."); return end
-        
-        print("\n--- [GOKU EXPORT: MAP CONFIG] ---")
-        print("Config.Map = {")
-        
-        local function printPart(p, indent)
-            if not p:IsA("BasePart") then return end
-            print(string.format("%s%s = {", indent, p.Name))
-            print(string.format("%s\tPosition = Vector3.new(%.2f, %.2f, %.2f),", indent, p.Position.X, p.Position.Y, p.Position.Z))
-            print(string.format("%s\tSize = Vector3.new(%.2f, %.2f, %.2f),", indent, p.Size.X, p.Size.Y, p.Size.Z))
-            print(string.format("%s},", indent))
-        end
-
-        local sz = map:FindFirstChild("SafeZones") and map.SafeZones:FindFirstChild("SafeZoneBase")
-        if sz then printPart(sz, "\t") end
-        
-        local pvp = map:FindFirstChild("PvPZones") and map.PvPZones:FindFirstChild("PvPArenaBase")
-        if pvp then printPart(pvp, "\t") end
-        
-        local starter = Workspace:FindFirstChild("StarterZone") and Workspace.StarterZone:FindFirstChild("Base")
-        if starter then 
-            print("\tStarterZone = {")
-            print(string.format("\t\tPosition = Vector3.new(%.2f, %.2f, %.2f),", starter.Position.X, starter.Position.Y, starter.Position.Z))
-            print(string.format("\t\tSize = Vector3.new(%.2f, %.2f, %.2f),", starter.Size.X, starter.Size.Y, starter.Size.Z))
-            print("\t},")
-        end
-
-        print("}")
-        print("--- [END EXPORT] ---\n")
-        print("[Goku Plugin] Map config exported to Output (F9)!")
-    end)
-
-    local function cleanAll()
-        print("[Goku Plugin] Performing Master Clean...");
-        for _, child in ipairs(StarterGui:GetChildren()) do
-            if child:IsA("ScreenGui") then child:Destroy(); end
-        end
-        local map = Workspace:FindFirstChild("Map");
-        if map then map:Destroy(); end
-        print("[Goku Plugin] Clean complete!");
-    end
 
     bakeButton.Click:Connect(function()
-        print("[Goku Plugin] Starting Power Bake...");
-        -- Removed cleanAll() to preserve manual Studio edits (Smart Binding handles updates)
+        print("[Goku Plugin] Refreshing Studio Environment...");
 
-        -- 2.1 Bake Map
+        -- 1. Initialize Map Logic (Attach prompts, GUIs to existing parts)
         local server = ServerScriptService:FindFirstChild("Server") or ServerScriptService:FindFirstChild("Source");
         local ms = server and server:FindFirstChild("Services") and server.Services:FindFirstChild("MapService");
         if ms and ms:IsA("ModuleScript") then 
+            print("[Goku Plugin] Initializing MapService...");
             local success, err = pcall(function() require(ms).Init(); end);
-            if not success then warn("[Goku Plugin] Map Bake Error: " .. tostring(err)); end
+            if not success then warn("[Goku Plugin] MapInit Error: " .. tostring(err)); end
         end
-        -- 2.2 Bake UI
+
+        -- 2. Bake UI (Render React components into StarterGui for preview)
         local scRoot = StarterPlayer:WaitForChild("StarterPlayerScripts"):FindFirstChild("Client");
         local uiMod = scRoot and scRoot:FindFirstChild("UI");
         if uiMod then
@@ -97,10 +51,8 @@ local function runFullLogic()
                 end
             end
         end
-        print("[Goku Plugin] Power Bake complete!");
+        print("[Goku Plugin] Refresh complete!");
     end);
-    
-    cleanButton.Click:Connect(cleanAll);
 end
 
 pcall(runFullLogic);
