@@ -233,7 +233,7 @@ local function createMonsterModel(cfg: Types.MonsterConfig, position: Vector3): 
 	model.PrimaryPart = body
 	-- model:ScaleTo(0.01)
 	model.Parent = Workspace
-	
+
 	-- Spawn Effect
 	local p = Instance.new("Part")
 	p.Anchored = true
@@ -244,8 +244,8 @@ local function createMonsterModel(cfg: Types.MonsterConfig, position: Vector3): 
 	local attachment = Instance.new("Attachment", p)
 	local particles = Instance.new("ParticleEmitter")
 	particles.Color = ColorSequence.new(body.Color)
-	particles.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 2), NumberSequenceKeypoint.new(1, 0)})
-	particles.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1)})
+	particles.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 2), NumberSequenceKeypoint.new(1, 0) })
+	particles.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
 	particles.Lifetime = NumberRange.new(0.5, 1)
 	particles.Speed = NumberRange.new(5, 15)
 	particles.Rate = 0
@@ -344,16 +344,18 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 	end
 
 	local model = createMonsterModel(cfg, spawnPos)
-	if not model then return end
+	if not model then
+		return
+	end
 
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	local hrp = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart") :: BasePart
-	
+
 	-- CRITICAL: Prevent network ownership jitter
 	if hrp:CanSetNetworkOwnership() then
 		hrp:SetNetworkOwner(nil)
 	end
-	
+
 	local path = SimplePath.new(model, {
 		AgentRadius = hrp.Size.X / 2 + 1,
 		AgentHeight = hrp.Size.Y + 1,
@@ -383,7 +385,7 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 				return
 			end
 			instance.CurrentHP = newHP
-	
+
 			-- Cập nhật thanh máu mượt mà
 			local rootPart = model:FindFirstChild("HumanoidRootPart")
 			if rootPart then
@@ -400,32 +402,32 @@ local function spawnMonster(cfg: Types.MonsterConfig)
 					end
 				end
 			end
-	
+
 			if newHP <= 0 then
 				instance.IsAlive = false
-	
+
 				-- Chỉ nhận quà nếu được kết liễu bởi Player (LastDamagedBy)
 				local killer: Player? = nil
 				local lastDamagedById = model:GetAttribute("LastDamagedBy")
 				if lastDamagedById then
 					killer = Players:GetPlayerByUserId(lastDamagedById)
 				end
-	
+
 				dropRewards(cfg, spawnPos, killer)
-	
+
 				-- Set Dying attribute so client can play an animation
 				model:SetAttribute("Dying", true)
-	
+
 				-- Delay destruction to allow for client-side VFX (e.g., Ripple squash/fade)
 				task.delay(1.0, function()
 					if model and model.Parent then
 						model:Destroy()
 					end
 				end)
-	
+
 				-- Remove from active
 				ActiveMonsters[model] = nil
-	
+
 				-- Respawn sau interval
 				task.delay(Config.MonsterRespawnTime, function()
 					spawnMonster(cfg)
@@ -447,21 +449,25 @@ function MonsterService.Init()
 	game:GetService("RunService").Heartbeat:Connect(function()
 		local now = os.clock()
 		local allPlayers = Players:GetPlayers()
-		
+
 		for model, instance in pairs(ActiveMonsters) do
 			-- Throttle updates (5Hz for normal, faster for bosses)
 			local updateRate = if instance.Config.IsBoss then 0.1 else 0.2
-			if now - (instance.LastUpdate or 0) < updateRate then continue end
+			if now - (instance.LastUpdate or 0) < updateRate then
+				continue
+			end
 			instance.LastUpdate = now
 
 			local hrp = model.PrimaryPart :: BasePart?
 			local humanoid = model:FindFirstChildOfClass("Humanoid")
-			if not hrp or not humanoid or humanoid.Health <= 0 then continue end
-			
+			if not hrp or not humanoid or humanoid.Health <= 0 then
+				continue
+			end
+
 			-- 1. Proximity Culling: Don't process AI if no player is nearby
 			local nearestPlayer: Player? = nil
 			local minDist = 300 -- Massive cull radius
-			local activeDist = if instance.Config.IsBoss then 200 else 80
+			local activeDist = instance.Config.AggroRange or (if instance.Config.IsBoss then 100 else 30)
 
 			for _, p in ipairs(allPlayers) do
 				local c = p.Character
@@ -470,7 +476,9 @@ function MonsterService.Init()
 					local d = (phrp.Position - hrp.Position).Magnitude
 					if d < minDist then
 						minDist = d
-						if d < activeDist then nearestPlayer = p end
+						if d < activeDist then
+							nearestPlayer = p
+						end
 					end
 				end
 			end
@@ -482,9 +490,9 @@ function MonsterService.Init()
 
 			-- 2. AI Logic (Simplified from the original per-monster loop)
 			local path = instance.SimplePath
-			if humanoid.PlatformStand then 
+			if humanoid.PlatformStand then
 				path:Stop()
-				continue 
+				continue
 			end
 
 			local zoneCenter = instance.ZoneCenter
@@ -496,10 +504,17 @@ function MonsterService.Init()
 			local flatCenter = Vector3.new(zoneCenter.X, 0, zoneCenter.Z)
 			local distFromZoneCenter = (flatPos - flatCenter).Magnitude
 			local leashRange = (math.max(zoneSizeX, zoneSizeZ) / 2) + 15 -- Radius + 15 stud buffer
-			
+
 			if distFromZoneCenter > leashRange then
 				if instance.State ~= "RETURN" then
-					print(string.format("[MonsterService] LEASHING: %s (Dist: %.1f > Max: %.1f)", model.Name, distFromZoneCenter, leashRange))
+					print(
+						string.format(
+							"[MonsterService] LEASHING: %s (Dist: %.1f > Max: %.1f)",
+							model.Name,
+							distFromZoneCenter,
+							leashRange
+						)
+					)
 				end
 				instance.State = "RETURN"
 			end
@@ -520,22 +535,31 @@ function MonsterService.Init()
 				if targetHrp then
 					local distToTarget = (hrp.Position - targetHrp.Position).Magnitude
 					local attackRange = Config.Shout.KnockbackRange - 4
-					
+
 					if distToTarget <= attackRange then
 						instance.State = "ATTACK"
 						path:Stop()
 						humanoid.AutoRotate = false
-						
+
 						local dir = (targetHrp.Position - hrp.Position).Unit
 						local targetCFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
 						hrp.CFrame = hrp.CFrame:Lerp(targetCFrame, 0.2)
-						
+
 						if now - instance.LastAttackTime >= 3.0 then
 							instance.LastAttackTime = now
-							TweenService:Create(hrp, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), {Color = Color3.new(1, 0, 0)}):Play()
+							TweenService:Create(
+								hrp,
+								TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true),
+								{ Color = Color3.new(1, 0, 0) }
+							):Play()
 							task.delay(0.6, function()
-								if not instance.IsAlive or not model.Parent then return end
-								local shoutType = if instance.Config.IsBoss and instance.CurrentHP < instance.Config.MaxHP * 0.5 then Config.ShoutTypes.Circular else Config.ShoutTypes.Normal
+								if not instance.IsAlive or not model.Parent then
+									return
+								end
+								local shoutType = if instance.Config.IsBoss
+										and instance.CurrentHP < instance.Config.MaxHP * 0.5
+									then Config.ShoutTypes.Circular
+									else Config.ShoutTypes.Normal
 								local ShoutService = require(script.Parent.ShoutService)
 								ShoutService.PerformShout(model, instance.Config.Attack, dir, true, nil, nil, shoutType)
 							end)
@@ -556,7 +580,12 @@ function MonsterService.Init()
 					end
 				elseif instance.State == "WANDER" then
 					humanoid.AutoRotate = true
-					local randomPos = zoneCenter + Vector3.new(math.random(-zoneSizeX/2 + 10, zoneSizeX/2 - 10), 0, math.random(-zoneSizeZ/2 + 10, zoneSizeZ/2 - 10))
+					local randomPos = zoneCenter
+						+ Vector3.new(
+							math.random(-zoneSizeX / 2 + 10, zoneSizeX / 2 - 10),
+							0,
+							math.random(-zoneSizeZ / 2 + 10, zoneSizeZ / 2 - 10)
+						)
 					path:Run(randomPos)
 					if (hrp.Position - randomPos).Magnitude < 5 then
 						instance.State = "IDLE"

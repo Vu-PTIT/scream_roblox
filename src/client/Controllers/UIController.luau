@@ -1,54 +1,224 @@
 --!strict
 -- UIController.luau
--- Client-side: Điều phối tất cả UI modules, tạo navigation buttons, handle notifications
+-- Client-side: Điều phối tất cả UI modules, quản lý cửa sổ và tích hợp React.
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Shared = game.ReplicatedStorage.Shared
+local Shared = ReplicatedStorage.Shared
 local Remotes = require(Shared.Remotes)
-local Config = require(Shared.Config)
+local _Config = require(Shared.Config)
 
 -- Lazy-load packages
-local React = require(game.ReplicatedStorage.Packages.React)
-local ReactRoblox = require(game.ReplicatedStorage.Packages.ReactRoblox)
+local React = require(ReplicatedStorage.Packages.React)
+local ReactRoblox = require(ReplicatedStorage.Packages.ReactRoblox)
 
--- Lazy-load UI modules
--- local HUD            = require(script.Parent.Parent.UI.HUD) -- Unused legacy HUD
+-- UI modules
 local HUDApp = require(script.Parent.Parent.UI.HUDApp)
 local ShopApp = require(script.Parent.Parent.UI.ShopApp)
+local BagUI = require(script.Parent.Parent.UI.BagUI)
 local CustomShoutUI = require(script.Parent.Parent.UI.CustomShoutUI)
 local CodeUI = require(script.Parent.Parent.UI.CodeUI)
 local RewardUI = require(script.Parent.Parent.UI.RewardUI)
 local EggHatchUI = require(script.Parent.Parent.UI.EggHatchUI)
-local SkillBar = require(script.Parent.Parent.UI.SkillBar)
 local SkillHatchUI = require(script.Parent.Parent.UI.SkillHatchUI)
-local BagUI = require(script.Parent.Parent.UI.BagUI)
 
 local UIController = {}
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+-- External Interface for React State
+local _uiEventHandler: ((id: string) -> ())? = nil
+
 -- ============================================================
--- WINDOW MANAGEMENT
+-- WINDOW MANAGEMENT (LEGACY & EXTERNAL)
 -- ============================================================
 
-local function CloseAllOpenWindows()
-	ShopApp.OpenWindow(nil)
-	if CustomShoutUI.Close then
-		CustomShoutUI.Close()
+function UIController.HandleAction(id: string)
+	-- Nếu React đã sẵn sàng, gửi action vào hệ thống React
+	if _uiEventHandler then
+		_uiEventHandler(id)
+	else
+		-- Fallback cho các module cũ chưa chuyển sang React hoàn toàn
+		print("[UIController] React handler not ready, using fallback for:", id)
+		if id == "Reward" then RewardUI.Open()
+		elseif id == "Shout" then CustomShoutUI.Open()
+		end
 	end
-	if CodeUI.Close then
-		CodeUI.Close()
-	end
-	if RewardUI.Close then
-		RewardUI.Close()
-	end
-	if BagUI.Close then
-		BagUI.Close()
-	end
+end
+
+-- ============================================================
+-- REACT ROOT COMPONENT (THE BRAIN)
+-- ============================================================
+
+local function UIAppComponent(_props: any)
+	local bagOpen, setBagOpen = React.useState(false)
+	local openWindow, setOpenWindow = React.useState(nil :: string?)
+	local data, setData = React.useState({})
+
+	-- Cung cấp handler ra ngoài để UIController.HandleAction dùng được
+	React.useLayoutEffect(function()
+		_uiEventHandler = function(id: string)
+			-- Logic đóng tất cả trước khi mở cái mới
+			if id == "Bag" or id == "Inventory" then
+				local newState = not bagOpen
+				setOpenWindow(nil)
+				setBagOpen(newState)
+				print("[UIAppComponent] Set BagOpen to:", newState)
+			elseif id == "Shop" or id == "Pet" or id == "Skill" or id == "Quest" or id == "Rebirth" or id == "Pets" or id == "Skills" then
+				setBagOpen(false)
+				local target = id
+				if id == "Pets" then target = "Pet"
+				elseif id == "Skills" then target = "Skill"
+				elseif id == "Shop" then target = "Shop"
+				end
+				
+				-- Toggle logic: Nếu đang mở đúng loại đó thì đóng lại
+				if openWindow == target then
+					setOpenWindow(nil)
+				else
+					setOpenWindow(target)
+				end
+				print("[UIAppComponent] Set OpenWindow to:", target or "nil")
+			elseif id == "CloseAll" then
+				setBagOpen(false)
+				setOpenWindow(nil)
+				if CustomShoutUI.Close then CustomShoutUI.Close() end
+				if CodeUI.Close then CodeUI.Close() end
+				if RewardUI.Close then RewardUI.Close() end
+			else
+				-- Xử lý các UI không phải React (Shout, Reward, v.v)
+				setBagOpen(false)
+				setOpenWindow(nil)
+				if id == "Reward" then RewardUI.Open()
+				elseif id == "Shout" then CustomShoutUI.Open()
+				end
+			end
+		end
+		return function() _uiEventHandler = nil end
+	end, {bagOpen, openWindow})
+
+	-- Unified Data Listener
+	React.useEffect(function()
+		local connection
+		local function check()
+			task.spawn(function()
+				local DataController = require(script.Parent.DataController)
+				if DataController and DataController.OnDataChanged then
+					setData(DataController.GetData() or {})
+					connection = DataController.OnDataChanged(function(key, val)
+						setData(function(prev)
+							if key == "__all__" then return val end
+							local d = table.clone(prev)
+							d[key] = val
+							return d
+						end)
+					end)
+				end
+			end)
+		end
+		check()
+		return function() if connection then connection() end end
+	end, {})
+
+	return React.createElement(React.Fragment, nil, {
+		HUD = React.createElement(HUDApp, { 
+			HandleAction = UIController.HandleAction,
+			Data = data,
+		}),
+		
+		-- ShopApp hiện tại nhận props để hiển thị (Centralized State)
+		Shop = React.createElement(ShopApp.Component, {
+			OpenWindow = openWindow,
+			OnClose = function() setOpenWindow(nil) end,
+			Data = data,
+		}),
+		
+		Bag = React.createElement(BagUI, {
+			Visible = bagOpen,
+			OnClose = function() setBagOpen(false) end,
+			Data = data,
+		})
+	})
+end
+
+-- ============================================================
+-- TRIGGERS & SHORTCUTS
+-- ============================================================
+
+local function bindProximityPrompts()
+	ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
+		if player == LocalPlayer then
+			local stationId = prompt.Name:match("Prompt_(.+)")
+			if not stationId then
+				local pName = prompt.Parent and prompt.Parent.Name or ""
+				if pName:find("Skill") then stationId = "Skill"
+				elseif pName:find("Pet") then stationId = "Pet"
+				elseif pName:find("Upgrade") or pName:find("Shop") then stationId = "Shop"
+				elseif pName:find("Rebirth") then stationId = "Rebirth"
+				elseif pName:find("Quest") then stationId = "Quest"
+				elseif pName:find("Reward") then stationId = "Reward"
+				elseif pName:find("Speech") or pName:find("Shout") then stationId = "Shout"
+				elseif pName:find("Inventory") or pName:find("Bag") then stationId = "Inventory"
+				end
+			end
+			if stationId then UIController.HandleAction(stationId) end
+		end
+	end)
+end
+
+local function bindClickDetectors()
+	task.spawn(function()
+		local map = workspace:WaitForChild("Map", 10)
+		if not map then return end
+		local stations = map:WaitForChild("Stations", 10)
+		if not stations then return end
+
+		local function setupClick(child: ClickDetector)
+			child.MouseClick:Connect(function()
+				local stationId = child.Name:match("Click_(.+)")
+				if not stationId then
+					local pName = child.Parent and child.Parent.Name or ""
+					if pName:find("Skill") then stationId = "Skill"
+					elseif pName:find("Pet") then stationId = "Pet"
+					elseif pName:find("Upgrade") or pName:find("Shop") then stationId = "Shop"
+					elseif pName:find("Rebirth") then stationId = "Rebirth"
+					elseif pName:find("Quest") then stationId = "Quest"
+					elseif pName:find("Reward") then stationId = "Reward"
+					elseif pName:find("Speech") or pName:find("Shout") then stationId = "Shout"
+					elseif pName:find("Inventory") or pName:find("Bag") then stationId = "Inventory"
+					end
+				end
+				if stationId then UIController.HandleAction(stationId) end
+			end)
+		end
+
+		for _, station in ipairs(stations:GetChildren()) do
+			if station:IsA("BasePart") then
+				for _, child in ipairs(station:GetChildren()) do
+					if child:IsA("ClickDetector") then setupClick(child) end
+				end
+			end
+		end
+	end)
+end
+
+local function _bindKeyShortcuts()
+	UserInputService.InputBegan:Connect(function(input: InputObject, gp: boolean)
+		if gp then return end
+		if input.KeyCode == Enum.KeyCode.T then
+			UIController.HandleAction("Shout")
+		elseif input.KeyCode == Enum.KeyCode.B then
+			UIController.HandleAction("Bag")
+		elseif input.KeyCode == Enum.KeyCode.E then
+			UIController.HandleAction("Shop")
+		elseif input.KeyCode == Enum.KeyCode.Escape then
+			UIController.HandleAction("CloseAll")
+		end
+	end)
 end
 
 -- ============================================================
@@ -56,18 +226,16 @@ end
 -- ============================================================
 
 local function showNotification(message: string)
-	local existingScreen = PlayerGui:FindFirstChild("NotifScreen") :: ScreenGui?
-	local screen: ScreenGui
-	if existingScreen then
-		screen = existingScreen
-	else
+	local screen = PlayerGui:FindFirstChild("NotifScreen") :: ScreenGui?
+	if not screen then
 		local newScreen = Instance.new("ScreenGui")
 		newScreen.Name = "NotifScreen"
 		newScreen.ResetOnSpawn = false
-		newScreen.DisplayOrder = 100 -- Topmost
+		newScreen.DisplayOrder = 1000
 		newScreen.Parent = PlayerGui
 		screen = newScreen
 	end
+	if not screen then return end
 
 	local toast = Instance.new("Frame")
 	toast.Size = UDim2.new(0, 380, 0, 52)
@@ -81,11 +249,6 @@ local function showNotification(message: string)
 	corner.CornerRadius = UDim.new(0, 10)
 	corner.Parent = toast
 
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(100, 80, 200)
-	stroke.Thickness = 1.5
-	stroke.Parent = toast
-
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, -16, 1, 0)
 	label.Position = UDim2.new(0, 8, 0, 0)
@@ -93,388 +256,29 @@ local function showNotification(message: string)
 	label.Text = message
 	label.TextColor3 = Color3.fromRGB(230, 230, 255)
 	label.Font = Enum.Font.GothamBold
-	label.TextSize = 15
+	label.TextSize = 14
 	label.TextWrapped = true
-	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Parent = toast
 
-	-- Slide in từ top
-	TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Position = UDim2.new(0.5, -190, 0, 12),
-	}):Play()
-
-	task.delay(2.8, function()
-		-- Slide out
-		TweenService:Create(toast, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-			Position = UDim2.new(0.5, -190, 0, -60),
-		}):Play()
-		task.wait(0.3)
-		if toast and toast.Parent then
+	TweenService:Create(toast, TweenInfo.new(0.3), { Position = UDim2.new(0.5, -190, 0, 20) }):Play()
+	task.delay(3, function()
+		if toast then
+			TweenService:Create(toast, TweenInfo.new(0.3), { Position = UDim2.new(0.5, -190, 0, -60) }):Play()
+			task.wait(0.3)
 			toast:Destroy()
 		end
 	end)
 end
 
 -- ============================================================
--- BOTTOM NAV BUTTONS
--- ============================================================
-local function _buildNavBar()
-	local screen = Instance.new("ScreenGui")
-	screen.Name = "NavBar"
-	screen.ResetOnSpawn = false
-	screen.DisplayOrder = 10
-	screen.Parent = PlayerGui
-
-	local container = Instance.new("Frame")
-	container.Name = "ButtonContainer"
-
-	local buttons = {
-		{
-			id = "Shop",
-			icon = "🛒",
-			baseColor = Config.Theme.BtnShopBase,
-			shadowColor = Config.Theme.BtnShopShadow,
-			action = function()
-				CloseAllOpenWindows()
-				ShopApp.OpenWindow("Shop")
-			end,
-		},
-		{
-			id = "Pets",
-			icon = "🐾",
-			baseColor = Config.Theme.BtnPetsBase,
-			shadowColor = Config.Theme.BtnPetsShadow,
-			action = function()
-				CloseAllOpenWindows()
-				ShopApp.OpenWindow("Pet")
-			end,
-		},
-		{
-			id = "Skills",
-			icon = "🎴",
-			baseColor = Config.Theme.BtnCodeBase,
-			shadowColor = Config.Theme.BtnCodeShadow,
-			action = function()
-				CloseAllOpenWindows()
-				ShopApp.OpenWindow("Skill")
-			end,
-		},
-		{
-			id = "Quest",
-			icon = "📜",
-			baseColor = Config.Theme.BtnQuestBase,
-			shadowColor = Config.Theme.BtnQuestShadow,
-			action = function()
-				CloseAllOpenWindows()
-				ShopApp.OpenWindow("Quest")
-			end,
-		},
-		{
-			id = "Reward",
-			icon = "⏱️",
-			baseColor = Config.Theme.BtnRewardBase,
-			shadowColor = Config.Theme.BtnRewardShadow,
-			action = function()
-				CloseAllOpenWindows()
-				RewardUI.Open()
-			end,
-		},
-		{
-			id = "Shout",
-			icon = "✏️",
-			baseColor = Config.Theme.BtnShoutBase,
-			shadowColor = Config.Theme.BtnShoutShadow,
-			action = function()
-				CloseAllOpenWindows()
-				CustomShoutUI.Open()
-			end,
-		},
-	}
-
-	local numBtns = #buttons
-	container.Size = UDim2.new(0, (numBtns * 58) + ((numBtns - 1) * 12), 0, 58)
-	container.Position = UDim2.new(0.5, 0, 1, -85)
-	container.AnchorPoint = Vector2.new(0.5, 0)
-	container.BackgroundTransparency = 1
-	container.Parent = screen
-
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, 12)
-	layout.Parent = container
-
-	for i, btnData in ipairs(buttons) do
-		local btnWrapper = Instance.new("Frame")
-		btnWrapper.Name = btnData.id .. "Wrapper"
-		btnWrapper.Size = UDim2.new(0, 58, 0, 58)
-		btnWrapper.BackgroundTransparency = 1
-		btnWrapper.LayoutOrder = i
-		btnWrapper.Parent = container
-
-		-- Modern Glow / Shadow
-		local shadow = Instance.new("Frame")
-		shadow.Name = "Shadow"
-		shadow.Size = UDim2.new(1, 0, 1, 0)
-		shadow.BackgroundColor3 = btnData.shadowColor
-		shadow.BackgroundTransparency = 0.2
-		shadow.BorderSizePixel = 0
-		shadow.Parent = btnWrapper
-
-		local shadowCorner = Instance.new("UICorner")
-		shadowCorner.CornerRadius = Config.Theme.CornerRadius
-		shadowCorner.Parent = shadow
-
-		-- Main Button
-		local btn = Instance.new("TextButton")
-		btn.Name = "Button"
-		btn.Size = UDim2.new(1, 0, 1, -4)
-		btn.BackgroundColor3 = btnData.baseColor
-		btn.Text = btnData.icon
-		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		btn.Font = Enum.Font.GothamBold
-		btn.TextSize = 28
-		btn.BorderSizePixel = 0
-		btn.AutoButtonColor = false
-		btn.Parent = btnWrapper
-
-		local btnCorner = Instance.new("UICorner")
-		btnCorner.CornerRadius = Config.Theme.CornerRadius
-		btnCorner.Parent = btn
-
-		local stroke = Instance.new("UIStroke")
-		stroke.Thickness = 1.5
-		stroke.Color = Color3.fromRGB(255, 255, 255)
-		stroke.Transparency = 0.8
-		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		stroke.Parent = btn
-
-		local action = btnData.action
-
-		-- Hover effect
-		btn.MouseEnter:Connect(function()
-			TweenService:Create(btn, TweenInfo.new(0.15), {
-				BackgroundColor3 = btnData.baseColor:Lerp(Color3.new(1, 1, 1), 0.15),
-			}):Play()
-		end)
-
-		btn.MouseLeave:Connect(function()
-			TweenService:Create(btn, TweenInfo.new(0.15), {
-				BackgroundColor3 = btnData.baseColor,
-			}):Play()
-		end)
-
-		-- Click animation
-		btn.InputBegan:Connect(function(input)
-			if
-				input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch
-			then
-				TweenService:Create(btn, TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					Position = UDim2.new(0, 0, 0, 4),
-				}):Play()
-			end
-		end)
-
-		btn.InputEnded:Connect(function(input)
-			if
-				input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch
-			then
-				TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					Position = UDim2.new(0, 0, 0, 0),
-				}):Play()
-			end
-		end)
-
-		btn.Activated:Connect(function()
-			action()
-		end)
-	end
-end
-
--- ============================================================
--- KEYBOARD SHORTCUTS
--- ============================================================
-local function _bindKeyShortcuts()
-	UserInputService.InputBegan:Connect(function(input: InputObject, gp: boolean)
-		if gp then
-			return
-		end
-		if input.KeyCode == Enum.KeyCode.T then
-			CloseAllOpenWindows()
-			CustomShoutUI.Open()
-		elseif input.KeyCode == Enum.KeyCode.B then
-			CloseAllOpenWindows()
-			BagUI.Toggle()
-		end
-	end)
-end
-
--- ============================================================
--- PROXIMITY PROMPTS
--- ============================================================
--- ============================================================
--- STATION TRIGGERS (PROXIMITY & CLICK)
--- ============================================================
-local function handleStationTrigger(stationId: string)
-	print("[UIController] handleStationTrigger:", stationId)
-
-	-- Play click sound if available
-	pcall(function()
-		local sound = Instance.new("Sound")
-		sound.SoundId = "rbxassetid://6895079853" -- Standard click
-		sound.Volume = 0.5
-		sound.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-		sound:Play()
-		game:GetService("Debris"):AddItem(sound, 2)
-	end)
-
-	CloseAllOpenWindows()
-	print("[UIController] Trigggering window for stationId:", stationId)
-
-	if stationId == "Shop" then
-		ShopApp.OpenWindow("Shop")
-	elseif stationId == "Pet" then
-		ShopApp.OpenWindow("Pet")
-	elseif stationId == "Rebirth" then
-		ShopApp.OpenWindow("Rebirth")
-	elseif stationId == "Skill" then
-		ShopApp.OpenWindow("Skill")
-	elseif stationId == "Quest" then
-		ShopApp.OpenWindow("Quest")
-	elseif stationId == "Reward" then
-		RewardUI.Open()
-	elseif stationId == "Shout" then
-		CustomShoutUI.Open()
-	elseif stationId == "Inventory" then
-		BagUI.Open()
-	else
-		print("[UIController] Unknown stationId:", stationId)
-	end
-end
-
-local function bindProximityPrompts()
-	ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
-		print("[UIController] PromptTriggered:", prompt.Name, "by", player.Name)
-		if player == LocalPlayer then
-			local stationId = prompt.Name:match("Prompt_(.+)")
-
-			-- Fallback detection based on parent name or id
-			if not stationId then
-				local pName = prompt.Parent and prompt.Parent.Name or ""
-				if pName:find("Skill") then
-					stationId = "Skill"
-				elseif pName:find("Pet") then
-					stationId = "Pet"
-				elseif pName:find("Upgrade") or pName:find("Shop") then
-					stationId = "Shop"
-				elseif pName:find("Rebirth") then
-					stationId = "Rebirth"
-				elseif pName:find("Quest") then
-					stationId = "Quest"
-				elseif pName:find("Reward") then
-					stationId = "Reward"
-				elseif pName:find("Speech") or pName:find("Shout") then
-					stationId = "Shout"
-				elseif pName:find("Inventory") or pName:find("Bag") then
-					stationId = "Inventory"
-				end
-			end
-
-			print("[UIController] Final stationId:", stationId)
-			if stationId then
-				handleStationTrigger(stationId)
-			else
-				warn(
-					"[UIController] No stationId found for prompt:",
-					prompt.Name,
-					"Parent:",
-					prompt.Parent and prompt.Parent.Name
-				)
-			end
-		end
-	end)
-end
-
-local function bindClickDetectors()
-	task.spawn(function()
-		local map = workspace:WaitForChild("Map", 10)
-		if not map then
-			return
-		end
-		local stations = map:WaitForChild("Stations", 10)
-		if not stations then
-			return
-		end
-
-		local function setupClick(child: ClickDetector)
-			child.MouseClick:Connect(function()
-				local stationId = child.Name:match("Click_(.+)")
-				if not stationId then
-					local pName = child.Parent and child.Parent.Name or ""
-					if pName:find("Skill") then
-						stationId = "Skill"
-					elseif pName:find("Pet") then
-						stationId = "Pet"
-					elseif pName:find("Upgrade") or pName:find("Shop") then
-						stationId = "Shop"
-					elseif pName:find("Rebirth") then
-						stationId = "Rebirth"
-					elseif pName:find("Quest") then
-						stationId = "Quest"
-					elseif pName:find("Reward") then
-						stationId = "Reward"
-					elseif pName:find("Speech") or pName:find("Shout") then
-						stationId = "Shout"
-					elseif pName:find("Inventory") or pName:find("Bag") then
-						stationId = "Inventory"
-					end
-				end
-				if stationId then
-					handleStationTrigger(stationId)
-				end
-			end)
-		end
-
-		for _, station in ipairs(stations:GetChildren()) do
-			if station:IsA("BasePart") then
-				for _, child in ipairs(station:GetChildren()) do
-					if child:IsA("ClickDetector") then
-						setupClick(child)
-					end
-				end
-			end
-		end
-
-		stations.ChildAdded:Connect(function(station)
-			if station:IsA("BasePart") then
-				task.wait(0.5) -- wait for children
-				for _, child in ipairs(station:GetChildren()) do
-					if child:IsA("ClickDetector") then
-						setupClick(child)
-					end
-				end
-			end
-		end)
-	end)
-end
-
--- ============================================================
 -- INIT
 -- ============================================================
+
 function UIController.Init()
-	-- Khởi động tất cả UI modules
-	-- HUD.Init() -- Legacy HUD disabled in favor of React HUDApp
-
-	-- Mount React HUD
+	print("[UIController] Mounting React root...")
 	local root = ReactRoblox.createRoot(PlayerGui)
-	root:render(
-		React.createElement(React.Fragment, nil, React.createElement(HUDApp), React.createElement(ShopApp.Component))
-	)
+	root:render(React.createElement(UIAppComponent))
 
-	-- Disable default Roblox Health UI
 	pcall(function()
 		game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Health, false)
 	end)
@@ -484,25 +288,16 @@ function UIController.Init()
 	RewardUI.Init()
 	EggHatchUI.Init()
 	SkillHatchUI.Init()
-	SkillBar.Init()
-	BagUI.Init()
 
-	-- Nav bar + shortcuts + map
-	_buildNavBar()
 	_bindKeyShortcuts()
 	bindProximityPrompts()
 	bindClickDetectors()
 
-	-- Notification remote
-	Remotes.Events.Notification.OnClientEvent:Connect(function(...)
-		local args = { ... }
-		local msg = args[1]
-		if type(msg) == "string" then
-			showNotification(msg)
-		end
+	Remotes.Events.Notification.OnClientEvent:Connect(function(msg)
+		if type(msg) == "string" then showNotification(msg) end
 	end)
 
-	print("[UIController] All UI initialized | Shortcuts: T=Shout")
+	print("[UIController] Unified UI System Ready")
 end
 
 return UIController

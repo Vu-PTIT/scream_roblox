@@ -2,9 +2,9 @@
 -- Types.luau
 -- Định nghĩa tập trung tất cả kiểu dữ liệu cho Shout Simulator
 
-export type PetRarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary"
+export type PetRarity = "Common" | "Rare" | "Epic" | "Legendary"
 export type ShoutType = "Normal" | "Circular" | "Focused"
-export type SkillRarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary"
+export type SkillRarity = "Common" | "Rare" | "Epic" | "Legendary"
 
 
 export type PetData = {
@@ -22,7 +22,7 @@ export type SkillData = {
 	DamageMult: number,
 	Cooldown: number,
 	Equipped: boolean,
-	SlotIndex: number?,   -- 1 hoặc 2
+	SlotIndex: number?,   -- 1 đến 5
 }
 
 export type UpgradeLevel = {
@@ -61,7 +61,7 @@ export type PlayerData = {
 
 	-- Skills (thay thế cho CurrentShoutType)
 	Skills: { SkillData },
-	EquippedSkillIds: { string }, -- Tối đa 2 (2 slot)
+	EquippedSkillIds: { string }, -- Tối đa 5 (5 slot)
 
 
 	-- Meta
@@ -101,6 +101,7 @@ export type MonsterConfig = {
 	KnockbackResistance: number, -- 0.0 (max far) -> 1.0 (no move)
 	SpawnZone: string,      -- Tên khu vực ("PvEZone1", ...)
 	IsBoss: boolean?,       -- (Nâng cao) Có phải boss không?
+	AggroRange: number?,    -- Bán kính phát hiện người chơi (studs)
 }
 
 

@@ -60,6 +60,10 @@ local Remotes = {
 	-- [Server → Client] Kết quả gacha trả về client để hiển thị animation
 	-- Payload: pets: { PetData }
 	EggOpenResult = Event("EggOpenResult"),
+	
+	-- [Client → Server] Bán pet thừa lấy vàng
+	-- Payload: petId: string
+	SellPet = Event("SellPet"),
 
 	-- [Client → Server] Yêu cầu mở cuộn skill
 	-- Payload: quantity: number (1 hoặc 10)
@@ -68,6 +72,10 @@ local Remotes = {
 	-- [Server → Client] Kết quả gacha skill
 	-- Payload: skills: { SkillData }
 	SkillScrollResult = Event("SkillScrollResult"),
+
+	-- [Client → Server] Bán skill thừa lấy vàng
+	-- Payload: skillId: string
+	SellSkill = Event("SellSkill"),
 
 	MonsterShoutVFX = Event("MonsterShoutVFX"),
 
@@ -117,6 +125,14 @@ local Remotes = {
 
 	-- [Shared] Refx VFX System
 	RefxSignal = Event("RefxSignal"),
+
+	-- [Client → Server] Mua hiệu ứng di chuyển (Dash/Jump)
+	-- Payload: effectId: string
+	BuyMovementEffect = Event("BuyMovementEffect"),
+
+	-- [Client → Server] Trang bị hiệu ứng di chuyển
+	-- Payload: effectId: string, moveType: "Dash" | "Jump"
+	SetMovementEffect = Event("SetMovementEffect"),
 }
 
 -- ============================================================

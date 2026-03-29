@@ -234,9 +234,17 @@ local function onPlayerAdded(player: Player)
 end
 
 local function onPlayerRemoving(player: Player)
-	saveData(player)
-	ActiveSessions[player.UserId] = nil
-	LastSaveTimes[player.UserId]  = nil
+	local userId = player.UserId
+	local session = ActiveSessions[userId]
+	if not session then return end
+
+	-- Block background loops from updating while waiting for DataStore to yield
+	ActiveSessions[userId] = nil
+	LastSaveTimes[userId] = nil
+
+	local key = "Player_" .. userId
+	safeSet(key, session)
+
 	print("[DataService] Saved and removed session for", player.Name)
 end
 
@@ -278,6 +286,73 @@ if RunService:IsRunning() then
 		for _, player in ipairs(Players:GetPlayers()) do
 			saveData(player)
 		end
+	end)
+
+	-- ============================================================
+	-- MOVEMENT EFFECTS: Mua & Equip
+	-- ============================================================
+	Remotes.Events.BuyMovementEffect.OnServerEvent:Connect(function(player: Player, effectId: any)
+		if type(effectId) ~= "string" then return end
+
+		local effectCfg = Config.GetMovementEffect(effectId)
+		if not effectCfg then
+			Remotes.Events.Notification:FireClient(player, "❌ Effect not found: " .. effectId)
+			return
+		end
+
+		local data = DataService.GetData(player)
+		if not data then return end
+		local data_any = data :: any
+
+		-- Kiểm tra đã sở hữu chưa
+		local owned = data_any.OwnedMovementEffects or {}
+		for _, id in ipairs(owned) do
+			if id == effectId then
+				Remotes.Events.Notification:FireClient(player, "⚠️ You already own " .. effectCfg.DisplayName .. "!")
+				return
+			end
+		end
+
+		-- Kiểm tra tiền Gold
+		local cost = effectCfg.Cost or 0
+		if cost > 0 then
+			if (data.Gold or 0) < cost then
+				Remotes.Events.Notification:FireClient(player, "💰 Not enough Gold! Need " .. tostring(cost) .. " Gold.")
+				return
+			end
+			DataService.UpdateField(player, "Gold", data.Gold - cost)
+		end
+
+		-- Thêm vào owned
+		table.insert(owned, effectId)
+		DataService.UpdateField(player, "OwnedMovementEffects", owned)
+		Remotes.Events.Notification:FireClient(player, "✅ Purchased " .. effectCfg.DisplayName .. "!")
+	end)
+
+	Remotes.Events.SetMovementEffect.OnServerEvent:Connect(function(player: Player, effectId: any, moveType: any)
+		if type(effectId) ~= "string" or type(moveType) ~= "string" then return end
+		if moveType ~= "Dash" and moveType ~= "Jump" then return end
+
+		local data = DataService.GetData(player)
+		if not data then return end
+		local data_any = data :: any
+
+		-- Kiểm tra sở hữu
+		local owned = data_any.OwnedMovementEffects or {}
+		local hasIt = false
+		for _, id in ipairs(owned) do
+			if id == effectId then
+				hasIt = true
+				break
+			end
+		end
+		if not hasIt then
+			Remotes.Events.Notification:FireClient(player, "❌ You don't own this effect!")
+			return
+		end
+
+		local fieldKey = (moveType == "Dash") and "EquippedDashEffect" or "EquippedJumpEffect"
+		DataService.UpdateField(player, fieldKey, effectId)
 	end)
 end
 

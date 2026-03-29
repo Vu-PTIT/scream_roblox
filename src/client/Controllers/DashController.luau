@@ -66,10 +66,10 @@ local function performDash()
 	-- Xóa lực lướt sau thời gian chỉ định trong Config
 	Debris:AddItem(dashVelocity, Config.Dash.Duration)
 
-	-- Gọi hàm hét (Shout) cùng lúc khi lướt, bắn sóng thẳng ra sau lưng
+	-- Phát VFX theo skill đang equipped (từ shop), KHÔNG gây dame
 	task.spawn(function()
-		if ShoutController.PerformShout then
-			ShoutController.PerformShout(0, -direction)
+		if ShoutController.PerformVFXOnly then
+			ShoutController.PerformVFXOnly(direction, "Dash")
 		end
 	end)
 end

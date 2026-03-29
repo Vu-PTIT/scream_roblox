@@ -35,6 +35,9 @@ local defaultData: Types.PlayerData = {
 	ClaimedPlaytimeRewards = {},
 	Skills = {},
 	EquippedSkillIds = {},
+	OwnedMovementEffects = { "Default" }, -- Hiệu ứng mặc định luôn có
+	EquippedDashEffect = "Default",
+	EquippedJumpEffect = "Default",
 }
 Config.DefaultPlayerData = defaultData
 
@@ -144,22 +147,22 @@ Config.Map = {
 
 -- ============================================================
 -- AUDIO (SFX & BGM)
--- Dùng rbxasset:// (file built-in của Roblox) để tránh lỗi "asset type mismatch"
+-- Dùng rbxassetid:// (file ID tham chiếu từ Roblox library) để đảm bảo hoạt động trên Live servers
 -- Muốn dùng âm thanh khác: Vào Toolbox → Audio → copy ID → đổi thành rbxassetid://ID
 -- ============================================================
 Config.Audio = {
 	BGM = "rbxassetid://1837618405", -- Action Music
-	ShoutSFX = "rbxasset://sounds/uice_shout.wav", -- Fallback sound
-	DashSFX = "rbxasset://sounds/switch.wav", -- Tiếng click/switch (built-in)
-	ImpactSFX = "rbxasset://sounds/splat.mp3", -- Tiếng va chạm bùm (built-in)
-	JumpSFX = "rbxasset://sounds/action_jump.mp3",
-	LandSFX = "rbxasset://sounds/impact_drop.mp3",
+	ShoutSFX = "rbxassetid://138090596", -- Fixed: Valid sound ID for shout (Explosion/Impact)
+	DashSFX = "rbxassetid://12222124", -- Swoosh effect
+	ImpactSFX = "rbxassetid://134012322", -- Soft impact
+	JumpSFX = "rbxassetid://12222225",
+	LandSFX = "rbxassetid://12222152",
 
-	-- Gacha / Egg SFX (Placeholder sử dụng builtin sounds)
-	EggShakeSFX = "rbxasset://sounds/metal.ogg", -- Tiếng rung
-	EggFlashSFX = "rbxasset://sounds/snap.wav", -- Tiếng nổ lóe sáng
-	EggHatchNormalSFX = "rbxasset://sounds/action_jump.mp3", -- Ra pet thường
-	EggHatchEpicSFX = "rbxasset://sounds/electronicpingshort.mp3", -- Ra pet hiếm
+	-- Gacha / Egg SFX (Real assets)
+	EggShakeSFX = "rbxassetid://12222070",
+	EggFlashSFX = "rbxassetid://12222132",
+	EggHatchNormalSFX = "rbxassetid://12222225",
+	EggHatchEpicSFX = "rbxassetid://12222090",
 }
 
 -- ============================================================
@@ -244,7 +247,7 @@ local petsData: { Types.PetConfig } = {
 	{
 		PetType = "EchoFox",
 		DisplayName = "Echo Fox",
-		Rarity = "Uncommon",
+		Rarity = "Rare",
 		Multiplier = 1.12,
 		ModelId = "rbxassetid://6031280882",
 		Icon = "rbxassetid://5299499872",
@@ -279,14 +282,22 @@ Config.Pets = petsData
 -- Trọng số gacha (tổng = 100)
 local gachaWeights: { [string]: number } = {
 	Common = 55,
-	Uncommon = 25,
-	Rare = 12,
-	Epic = 6,
-	Legendary = 2,
+	Rare = 30,
+	Epic = 12,
+	Legendary = 3,
 }
 Config.PetGachaWeights = gachaWeights
 
 Config.EggCostGold = 500 -- chi phí mở 1 trứng
+
+-- Giá bán pet thừa (vàng nhận được khi bán)
+-- Legendary = đúng bằng giá mở 1 trứng (500)
+Config.PetSellPrices = {
+	Common    = 15,   -- 3% giá trứng
+	Rare      = 50,   -- 10% giá trứng
+	Epic      = 125,  -- 25% giá trứng
+	Legendary = 500,  -- 1 lần mở trứng
+}
 
 -- ============================================================
 -- SKILLS
@@ -319,7 +330,7 @@ local skillsData: { Types.SkillConfig } = {
 	{
 		SkillType = "Shockwave",
 		DisplayName = "Shockwave",
-		Rarity = "Uncommon",
+		Rarity = "Rare",
 		ShoutTypeId = "Circular",
 		DamageMult = 0.9,
 		Cooldown = 1.2,
@@ -331,7 +342,7 @@ local skillsData: { Types.SkillConfig } = {
 	{
 		SkillType = "PiercingRoar",
 		DisplayName = "Piercing Roar",
-		Rarity = "Uncommon",
+		Rarity = "Rare",
 		ShoutTypeId = "Focused",
 		DamageMult = 1.2,
 		Cooldown = 1.8,
@@ -411,14 +422,259 @@ local skillsData: { Types.SkillConfig } = {
 Config.Skills = skillsData
 
 Config.SkillGachaWeights = {
-	Common = 60,
-	Uncommon = 25,
-	Rare = 10,
-	Epic = 4,
-	Legendary = 1,
+	Common = 55,
+	Rare = 28,
+	Epic = 12,
+	Legendary = 5,
 }
 
 Config.SkillScrollCost = 1000 -- chi phí mở 1 cuộn skill
+
+-- Giá bán skill thừa (vàng nhận được khi bán)
+-- Legendary = đúng bằng giá mở 1 cuộn skill (SkillScrollCost = 1000)
+Config.SkillSellPrices = {
+	Common    = 50,   -- 5% giá cuộn
+	Rare      = 200,  -- 20% giá cuộn
+	Epic      = 500,  -- 50% giá cuộn
+	Legendary = 1000, -- = 1 lần mở cuộn (SkillScrollCost)
+}
+
+-- ============================================================
+-- MOVEMENT EFFECTS (Hiệu ứng Dash & Jump riêng biệt với Skills)
+-- Người chơi có thể mua và trang bị cho từng loại di chuyển
+-- ============================================================
+local movementEffectsData: { any } = {
+	-- === MẸU ĐỊN GIẢN (MẶC ĐỊNH - FREE) ===
+	{
+		Id = "Default",
+		DisplayName = "Basic Trail",
+		Description = "Hiệu ứng mặc định của tất cả.",
+		Icon = "💨",
+		Rarity = "Common",
+		Cost = 0,
+		IsFree = true,
+		ApplyTo = "Both", -- "Dash", "Jump", "Both"
+		Dash = {
+			Color = Color3.fromRGB(200, 200, 255),
+			Power = 20,
+			EffectSize = 0.8,
+			UsesCircular = false,
+		},
+		Jump = {
+			Color = Color3.fromRGB(200, 200, 255),
+			Power = 15,
+			EffectSize = 0.5,
+		},
+	},
+
+	-- === Lửa (Common) ===
+	{
+		Id = "Fire",
+		DisplayName = "Inferno Rush",
+		Description = "Vệt qua như một ngọn lửa!",
+		Icon = "🔥",
+		Rarity = "Common",
+		Cost = 500,
+		ApplyTo = "Both",
+		Dash = {
+			Color = Color3.fromRGB(255, 120, 20),
+			Power = 25,
+			EffectSize = 1.0,
+			UsesCircular = false,
+		},
+		Jump = {
+			Color = Color3.fromRGB(255, 150, 30),
+			Power = 18,
+			EffectSize = 0.7,
+		},
+	},
+
+	-- === Băng (Common) ===
+	{
+		Id = "Ice",
+		DisplayName = "Frost Step",
+		Description = "Lạnh giá như băng tờ.",
+		Icon = "❄️",
+		Rarity = "Common",
+		Cost = 500,
+		ApplyTo = "Both",
+		Dash = {
+			Color = Color3.fromRGB(100, 220, 255),
+			Power = 22,
+			EffectSize = 1.0,
+			UsesCircular = false,
+		},
+		Jump = {
+			Color = Color3.fromRGB(150, 230, 255),
+			Power = 16,
+			EffectSize = 0.7,
+		},
+	},
+
+	-- === Điện (Rare) ===
+	{
+		Id = "Thunder",
+		DisplayName = "Thunder Dash",
+		Description = "Nhanh như tấm sét!",
+		Icon = "⚡",
+		Rarity = "Rare",
+		Cost = 1500,
+		ApplyTo = "Both",
+		Dash = {
+			Color = Color3.fromRGB(255, 255, 50),
+			Power = 30,
+			EffectSize = 1.2,
+			UsesCircular = false,
+		},
+		Jump = {
+			Color = Color3.fromRGB(255, 240, 80),
+			Power = 22,
+			EffectSize = 0.9,
+		},
+	},
+
+	-- === Bong bóng nước (Rare) ===
+	{
+		Id = "Aqua",
+		DisplayName = "Aqua Surge",
+		Description = "Trào dâng như sóng nước.",
+		Icon = "🌊",
+		Rarity = "Rare",
+		Cost = 1500,
+		ApplyTo = "Both",
+		Dash = {
+			Color = Color3.fromRGB(0, 150, 255),
+			Power = 28,
+			EffectSize = 1.2,
+			UsesCircular = true, -- Dùng dạng Circular VFX
+		},
+		Jump = {
+			Color = Color3.fromRGB(50, 180, 255),
+			Power = 20,
+			EffectSize = 0.9,
+		},
+	},
+
+	-- === Đất (Rare) ===
+	{
+		Id = "Earth",
+		DisplayName = "Tremor Stomp",
+		Description = "Mỗi nhảy là một trận động đất nhỏ!",
+		Icon = "🚧",
+		Rarity = "Rare",
+		Cost = 3500,
+		ApplyTo = "Both",
+		Dash = {
+			Color = Color3.fromRGB(180, 120, 60),
+			Power = 35,
+			EffectSize = 1.4,
+			UsesCircular = true,
+		},
+		Jump = {
+			Color = Color3.fromRGB(200, 140, 70),
+			Power = 25,
+			EffectSize = 1.1,
+		},
+	},
+
+	-- === Rồng (Rare) ===
+	{
+		Id = "Dragon",
+		DisplayName = "Dragon Burst",
+		Description = "Rong bay với năng lượng của rồng!",
+		Icon = "🐉",
+		Rarity = "Rare",
+		Cost = 4000,
+		ApplyTo = "Both",
+		Dash = {
+			Color = Color3.fromRGB(255, 80, 0),
+			Power = 40,
+			EffectSize = 1.5,
+			UsesCircular = false,
+		},
+		Jump = {
+			Color = Color3.fromRGB(255, 100, 20),
+			Power = 28,
+			EffectSize = 1.2,
+		},
+	},
+
+	-- === Cosmos/Vũ trụ (Epic) ===
+	{
+		Id = "Cosmic",
+		DisplayName = "Cosmic Shift",
+		Description = "Vượt qua cả không gian!",
+		Icon = "✨",
+		Rarity = "Epic",
+		Cost = 8000,
+		ApplyTo = "Both",
+		Dash = {
+			Color = Color3.fromRGB(200, 100, 255),
+			Power = 50,
+			EffectSize = 1.8,
+			UsesCircular = true,
+		},
+		Jump = {
+			Color = Color3.fromRGB(220, 130, 255),
+			Power = 35,
+			EffectSize = 1.4,
+		},
+	},
+
+	-- === Thần sét Phượng Hoàng (Legendary) ===
+	{
+		Id = "Phoenix",
+		DisplayName = "Phoenix Blaze",
+		Description = "Bất diệt như Phượng Hoàng!",
+		Icon = "🔴",
+		Rarity = "Legendary",
+		Cost = 20000,
+		ApplyTo = "Both",
+		Dash = {
+			Color = Color3.fromRGB(255, 200, 50),
+			Power = 70,
+			EffectSize = 2.0,
+			UsesCircular = false,
+		},
+		Jump = {
+			Color = Color3.fromRGB(255, 220, 80),
+			Power = 50,
+			EffectSize = 1.6,
+		},
+	},
+
+	-- === Void/Hố đen (Legendary) ===
+	{
+		Id = "Void",
+		DisplayName = "Void Rift",
+		Description = "Xé toạc cả vũ trụ khi di chuyển!",
+		Icon = "⚫",
+		Rarity = "Legendary",
+		Cost = 25000,
+		ApplyTo = "Both",
+		Dash = {
+			Color = Color3.fromRGB(80, 0, 160),
+			Power = 80,
+			EffectSize = 2.2,
+			UsesCircular = true,
+		},
+		Jump = {
+			Color = Color3.fromRGB(100, 20, 180),
+			Power = 60,
+			EffectSize = 1.8,
+		},
+	},
+}
+Config.MovementEffects = movementEffectsData
+
+function Config.GetMovementEffect(id: string): any?
+	for _, effect in ipairs(Config.MovementEffects) do
+		if effect.Id == id then
+			return effect
+		end
+	end
+	return nil
+end
 
 -- ============================================================
 -- MONSTERS
@@ -437,6 +693,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop = 10,
 		EggDropChance = 0.03,
 		SpawnZone = "StarterZone",
+		AggroRange = 25,
 	},
 	-- PvE Zone
 	{
@@ -450,6 +707,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop = 50,
 		EggDropChance = 0.15,
 		SpawnZone = "PvEZone",
+		AggroRange = 28,
 	},
 	{
 		Id = "EchoToad",
@@ -462,6 +720,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop = 30,
 		EggDropChance = 0.08,
 		SpawnZone = "PvEZone",
+		AggroRange = 25,
 	},
 	-- Desert (Rebirth 1)
 	{
@@ -475,6 +734,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop = 120,
 		EggDropChance = 0.20,
 		SpawnZone = "Desert",
+		AggroRange = 30,
 	},
 	{
 		Id = "SandGolem",
@@ -487,6 +747,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop = 200,
 		EggDropChance = 0.30,
 		SpawnZone = "Desert",
+		AggroRange = 30,
 	},
 	-- IceZone (Rebirth 3)
 	{
@@ -500,6 +761,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop = 400,
 		EggDropChance = 0.35,
 		SpawnZone = "IceZone",
+		AggroRange = 35,
 	},
 	{
 		Id = "FrostGiant",
@@ -512,6 +774,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop = 700,
 		EggDropChance = 0.45,
 		SpawnZone = "IceZone",
+		AggroRange = 35,
 	},
 	-- VoidRealm (Rebirth 7)
 	{
@@ -525,6 +788,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop = 1500,
 		EggDropChance = 0.60,
 		SpawnZone = "VoidRealm",
+		AggroRange = 40,
 	},
 	{
 		Id = "ShadowBeast",
@@ -537,6 +801,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop = 2500,
 		EggDropChance = 0.70,
 		SpawnZone = "VoidRealm",
+		AggroRange = 40,
 	},
 	-- HeavenlyStage (Rebirth 15)
 	{
@@ -550,6 +815,7 @@ local monstersData: { Types.MonsterConfig } = {
 		GoldDrop = 5000,
 		EggDropChance = 0.85,
 		SpawnZone = "HeavenlyStage",
+		AggroRange = 45,
 	},
 	-- Bosses
 	{
@@ -564,6 +830,7 @@ local monstersData: { Types.MonsterConfig } = {
 		EggDropChance = 0.80,
 		SpawnZone = "BossRoom",
 		IsBoss = true,
+		AggroRange = 60,
 	},
 	{
 		Id = "IceColossus",
@@ -577,6 +844,7 @@ local monstersData: { Types.MonsterConfig } = {
 		EggDropChance = 0.90,
 		SpawnZone = "IceBossRoom",
 		IsBoss = true,
+		AggroRange = 100,
 	},
 }
 
@@ -632,12 +900,12 @@ Config.Quests = {
 
 Config.MonetizationProducts = {
 	Gamepasses = {
-		{ Id = 189283745, Name = "Auto Train", Price = 150, Icon = "rbxassetid://5905055047", Type = "Gamepass" }, -- TODO: Thay Gamepass ID thật (Auto Train)
-		{ Id = 271828182, Name = "VIP (x2 Stats)", Price = 399, Icon = "rbxassetid://8050965706", Type = "Gamepass" }, -- TODO: Thay Gamepass ID thật (VIP)
+		{ Id = 189283745, Name = "Auto Train", Price = 150, Icon = "rbxassetid://5905055047", Type = "Gamepass" }, 
+		{ Id = 271828182, Name = "VIP (x2 Stats)", Price = 399, Icon = "rbxassetid://8050965706", Type = "Gamepass" }, 
 	},
 	DevProducts = {
-		{ Id = 987654321, Name = "+1,000 Gold", Price = 50, Icon = "rbxassetid://2703816766", Type = "DevProduct" }, -- TODO: Thay DevProduct ID thật (Gold gói nhỏ)
-		{ Id = 987654322, Name = "+5,000 Gold", Price = 200, Icon = "rbxassetid://2703816766", Type = "DevProduct" }, -- TODO: Thay DevProduct ID thật (Gold gói lớn)
+		{ Id = 987654321, Name = "+1,000 Gold", Price = 50, Icon = "rbxassetid://2703816766", Type = "DevProduct" }, 
+		{ Id = 987654322, Name = "+5,000 Gold", Price = 200, Icon = "rbxassetid://2703816766", Type = "DevProduct" }, 
 	},
 }
 
@@ -718,6 +986,10 @@ Config.Localization = {
 		NotEnoughGold = "💰 Not enough gold! Need %d Gold for %d items",
 		GetPets = "🥚 Received: %s",
 		GetSkills = "📜 Received: %s",
+		SellSkill = "💰 Sold %s for %d Gold!",
+		SellSkillEquipped = "⚠️ Cannot sell equipped skill!",
+		SellPet = "💰 Sold %s for %d Gold!",
+		SellPetEquipped = "⚠️ Cannot sell equipped pet!",
 		PetNotFound = "❌ Pet not found!",
 		SkillNotFound = "❌ Skill not found!",
 		MaxPetsEquipped = "⚠️ Maximum %d pets equipped!",
@@ -783,7 +1055,6 @@ Config.Theme = {
 	-- Rarity Colors (Modernized Glow)
 	RarityColors = {
 		Common = Color3.fromRGB(180, 185, 210),
-		Uncommon = Color3.fromRGB(110, 255, 150),
 		Rare = Color3.fromRGB(90, 190, 255),
 		Epic = Color3.fromRGB(210, 120, 255),
 		Legendary = Color3.fromRGB(255, 215, 80),
@@ -802,6 +1073,7 @@ Config.Animations = {
 	Idle = "rbxassetid://180435571", -- Ninja Combat Idle
 	Run = "rbxassetid://180426354", -- Ninja Run
 	Dash = "rbxassetid://180426354", -- Reuse Run for Dash or specialized
+	Jump = "rbxassetid://125750702",  -- Jump / Leap animation
 
 	-- Chiêu thức (Skills)
 	Shout_Normal = "rbxassetid://616168019", -- Roar / Power up

@@ -20,38 +20,34 @@ local function PillLabel(props: PillLabelProps)
     return React.createElement("Frame", {
         Size = UDim2.new(0, width, 0, height),
         BackgroundColor3 = props.BackgroundColor or Color3.fromRGB(35, 35, 40),
+        BackgroundTransparency = 0.2, -- Glass look
         BorderSizePixel = 0,
         LayoutOrder = props.LayoutOrder,
     }, {
         Corner = React.createElement("UICorner", {
-            CornerRadius = UDim.new(0.5, 0),
+            CornerRadius = UDim.new(0, 10),
         }),
-        -- Thêm UIStroke để làm viền nhẹ cho đẹp hơn
+        -- Subtle highlight border
         Stroke = React.createElement("UIStroke", {
             Color = Color3.fromRGB(255, 255, 255),
-            Transparency = 0.85,
-            Thickness = 1.5,
+            Transparency = 0.75,
+            Thickness = 1,
         }),
-        -- DropShadow
-        Shadow = React.createElement("ImageLabel", {
+        Icon = props.Icon and React.createElement("TextLabel", {
+            Size = UDim2.new(0, height, 1, 0),
             BackgroundTransparency = 1,
-            Image = "rbxassetid://6015897843",
-            ImageColor3 = Color3.new(0, 0, 0),
-            ImageTransparency = 0.5,
-            SliceCenter = Rect.new(49, 49, 450, 450),
-            ScaleType = Enum.ScaleType.Slice,
-            Size = UDim2.new(1, 30, 1, 30),
-            Position = UDim2.new(0.5, 0, 0.5, 4),
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            ZIndex = 0,
+            Text = props.Icon,
+            TextSize = 18,
+            ZIndex = 2,
         }),
         Label = React.createElement("TextLabel", {
-            Size = UDim2.new(1, 0, 1, 0),
+            Size = UDim2.new(1, props.Icon and -height or 0, 1, 0),
+            Position = UDim2.new(0, props.Icon and height or 0, 0, 0),
             BackgroundTransparency = 1,
-            Text = iconText,
+            Text = props.Text,
             TextColor3 = props.TextColor or Color3.new(1, 1, 1),
             Font = Enum.Font.GothamBold,
-            TextSize = 16,
+            TextSize = 14,
             TextXAlignment = Enum.TextXAlignment.Center,
             ZIndex = 2,
         }),

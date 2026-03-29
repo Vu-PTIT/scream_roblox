@@ -1,409 +1,306 @@
 --!strict
 -- BagUI.luau
--- Client-side: Giao diện Túi đồ hợp nhất (Bag) gồm 3 trang: Chỉ số, Kỹ năng, Pet
+-- Redesigned React-based Character/Inventory window.
+-- Tabs: Stats, Pets, Skills, Effects.
 
-local Players      = game:GetService("Players")
-local _TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local React = require(ReplicatedStorage.Packages.React)
+local Shared = ReplicatedStorage.Shared
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
 
-local Shared      = ReplicatedStorage:WaitForChild("Shared")
-local Config      = require(Shared.Config)
-local Remotes     = require(Shared.Remotes)
-local _Types       = require(Shared.Types)
+local Window = require(script.Parent.components.Window)
+local ModernButton = require(script.Parent.components.ModernButton)
 
-local DataController = require(script.Parent.Parent.Controllers.DataController)
+type TabType = "Stats" | "Pets" | "Skills" | "Effects"
 
-local BagUI = {}
-local LocalPlayer = Players.LocalPlayer
-
-local function getPlayerGui(): PlayerGui?
-	if not LocalPlayer then return nil end
-	return LocalPlayer:FindFirstChildOfClass("PlayerGui")
-end
-
-local screen: ScreenGui? = nil
-local mainPanel: Frame? = nil
-local contentArea: Frame? = nil
-local isOpen = false
-local currentTab = "Stats" -- Default tab
-
--- ============================================================
--- UTILS / THEME
--- ============================================================
-local function createCorner(radius: number): UICorner
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, radius)
-	return corner
-end
-
-local function createStroke(color: Color3, thickness: number, transparency: number): UIStroke
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = color
-	stroke.Thickness = thickness
-	stroke.Transparency = transparency
-	return stroke
-end
-
--- ============================================================
--- TAB: STATS
--- ============================================================
-local function renderStatsTab(parent: Instance)
-	parent:ClearAllChildren()
-	
-	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 10)
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = parent
-
-	local data = (DataController and DataController.GetData() or {}) :: any
-	
-	local function createStatRow(label: string, value: string, icon: string, order: number)
-		local row = Instance.new("Frame")
-		row.Name = label .. "Row"
-		row.Size = UDim2.new(0.9, 0, 0, 50)
-		row.BackgroundColor3 = Color3.fromRGB(30, 35, 45)
-		row.BackgroundTransparency = 0.4
-		row.BorderSizePixel = 0
-		row.LayoutOrder = order
-		row.Parent = parent
-		
-		createCorner(8).Parent = row
-		createStroke(Color3.fromRGB(100, 100, 120), 1, 0.6).Parent = row
-		
-		local iconLbl = Instance.new("TextLabel")
-		iconLbl.Size = UDim2.new(0, 50, 1, 0)
-		iconLbl.BackgroundTransparency = 1
-		iconLbl.Text = icon
-		iconLbl.TextSize = 24
-		iconLbl.Font = Enum.Font.GothamBold
-		iconLbl.Parent = row
-		
-		local textLbl = Instance.new("TextLabel")
-		textLbl.Size = UDim2.new(0.4, 0, 1, 0)
-		textLbl.Position = UDim2.new(0, 60, 0, 0)
-		textLbl.BackgroundTransparency = 1
-		textLbl.Text = label
-		textLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-		textLbl.Font = Enum.Font.GothamMedium
-		textLbl.TextSize = 16
-		textLbl.TextXAlignment = Enum.TextXAlignment.Left
-		textLbl.Parent = row
-		
-		local valLbl = Instance.new("TextLabel")
-		valLbl.Size = UDim2.new(0.4, 0, 1, 0)
-		valLbl.Position = UDim2.new(1, -60, 0, 0)
-		valLbl.AnchorPoint = Vector2.new(1, 0)
-		valLbl.BackgroundTransparency = 1
-		valLbl.Text = value
-		valLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-		valLbl.Font = Enum.Font.GothamBlack
-		valLbl.TextSize = 18
-		valLbl.TextXAlignment = Enum.TextXAlignment.Right
-		valLbl.Parent = row
+-- [COMPONENT] THẺ PET TRONG TÚI
+local function BagPetCard(props: { Pet: any, IsEquipped: boolean })
+	local pet = props.Pet
+	local petCfg = nil
+	local targetType = (pet.PetType or ""):lower():gsub("%s+", "")
+	for _, p in ipairs(Config.Pets) do
+		if p.PetType:lower():gsub("%s+", "") == targetType then petCfg = p; break end
 	end
 
-	local dmgCfg = Config.GetUpgrade("damage_1")
-	local armCfg = Config.GetUpgrade("armor_1")
+	local rarityColor = if petCfg then Config.Theme.RarityColors[petCfg.Rarity] else Color3.new(1, 1, 1)
 
-	local totalAtk = (data.Attack or 10) + (data.DamageUpgradeLevel or 0) * (dmgCfg and dmgCfg.StatPerLevel or 5)
-	local totalDef = (data.Defense or 10) + (data.ArmorUpgradeLevel or 0) * (armCfg and armCfg.StatPerLevel or 10)
+	return React.createElement("Frame", {
+		Size = UDim2.new(0, 115, 0, 145),
+		BackgroundColor3 = Color3.fromRGB(35, 38, 55),
+		BackgroundTransparency = 0.1,
+	}, {
+		Corner = React.createElement("UICorner", { CornerRadius = UDim.new(0, 12) }),
+		Stroke = React.createElement("UIStroke", {
+			Color = if props.IsEquipped then Color3.fromRGB(0, 255, 120) else rarityColor,
+			Thickness = if props.IsEquipped then 2.5 else 1.5,
+			Transparency = 0,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		}),
 
-	createStatRow("Cường hóa Sát thương", "Lv. " .. (data.DamageUpgradeLevel or 0), "⚔️", 1)
-	createStatRow("Cường hóa Giáp", "Lv. " .. (data.ArmorUpgradeLevel or 0), "🛡️", 2)
-	createStatRow("Tổng Sát thương", tostring(totalAtk), "🔥", 3)
-	createStatRow("Tổng Giáp", tostring(totalDef), "💎", 4)
-	createStatRow("Số lần Rebirth", tostring(data.RebirthCount or 0), "⭐", 5)
-	createStatRow("Hệ số Rebirth", "x" .. string.format("%.2f", (data.RebirthMultiplier or 1)), "📈", 6)
-	createStatRow("Vocal Points", string.format("%d", (data.VocalPoints or 0)), "🎙️", 7)
+		Icon = React.createElement("ImageLabel", {
+			Size = UDim2.new(0, 68, 0, 68),
+			Position = UDim2.new(0.5, 0, 0, 8),
+			AnchorPoint = Vector2.new(0.5, 0),
+			Image = if petCfg and petCfg.Icon then "rbxthumb://type=Asset&id=" .. (petCfg.Icon:match("%d+") or "0") .. "&w=150&h=150" else "rbxassetid://1065507455",
+			BackgroundTransparency = 1,
+			ZIndex = 2,
+		}),
+
+		NameLabel = React.createElement("TextLabel", {
+			Size = UDim2.new(1, -10, 0, 18),
+			Position = UDim2.new(0, 5, 0, 80),
+			Text = if petCfg then petCfg.DisplayName else pet.PetType,
+			TextColor3 = Color3.new(1, 1, 1),
+			Font = Enum.Font.GothamBold,
+			TextSize = 12,
+			TextScaled = true,
+			BackgroundTransparency = 1,
+		}),
+
+		MultLabel = React.createElement("TextLabel", {
+			Size = UDim2.new(1, -10, 0, 14),
+			Position = UDim2.new(0, 5, 0, 96),
+			Text = "x" .. string.format("%.2f", pet.Multiplier or (petCfg and petCfg.Multiplier) or 1),
+			TextColor3 = Color3.fromRGB(180, 185, 210),
+			Font = Enum.Font.Gotham,
+			TextSize = 10,
+			BackgroundTransparency = 1,
+		}),
+
+		EquipBtn = React.createElement("Frame", {
+			Size = UDim2.new(1, -10, 0, 26),
+			Position = UDim2.new(0, 5, 1, -32),
+			BackgroundTransparency = 1,
+		}, if props.IsEquipped then {
+			Unequip = React.createElement(ModernButton, {
+				Text = "UNEQUIP",
+				Size = UDim2.new(1, 0, 1, 0),
+				BackgroundColor = Color3.fromRGB(0, 180, 100),
+				OnClick = function() Remotes.Events.SetPetEquipped:FireServer(pet.Id, false) end,
+			})
+		} else {
+			Layout = React.createElement("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4) }),
+			Equip = React.createElement(ModernButton, {
+				Text = "EQUIP",
+				Size = UDim2.new(0.66, -2, 1, 0),
+				BackgroundColor = Color3.fromRGB(65, 70, 95),
+				OnClick = function() Remotes.Events.SetPetEquipped:FireServer(pet.Id, true) end,
+			}),
+			Sell = React.createElement(ModernButton, {
+				Text = "💰",
+				Size = UDim2.new(0.34, -2, 1, 0),
+				BackgroundColor = Color3.fromRGB(220, 100, 100),
+				OnClick = function() Remotes.Events.SellPet:FireServer(pet.Id) end,
+			}),
+		})
+	})
 end
 
--- ============================================================
--- TAB: SKILLS / PETS GRID HELPERS
--- ============================================================
-local function renderSkillsTab(parent: Instance)
-	parent:ClearAllChildren()
-	local grid = Instance.new("ScrollingFrame")
-	grid.Size = UDim2.new(1, -20, 1, -20)
-	grid.Position = UDim2.new(0, 10, 0, 10)
-	grid.BackgroundTransparency = 1
-	grid.BorderSizePixel = 0
-	grid.ScrollBarThickness = 4
-	grid.Parent = parent
-	
-	local gridLayout = Instance.new("UIGridLayout")
-	gridLayout.CellSize = UDim2.new(0, 120, 0, 140)
-	gridLayout.CellPadding = UDim2.new(0, 10, 0, 10)
-	gridLayout.Parent = grid
-
-	local data = (DataController and DataController.GetData() or {}) :: any
-	local skills = data.Skills or {}
-
-	for i, skill in ipairs(skills) do
-		local card = Instance.new("Frame")
-		card.BackgroundColor3 = Color3.fromRGB(40, 45, 60)
-		card.LayoutOrder = i
-		card.Parent = grid
-		createCorner(10).Parent = card
-		
-		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.new(1, 0, 0, 30)
-		lbl.BackgroundTransparency = 1
-		lbl.Text = skill.SkillType
-		lbl.TextColor3 = Color3.new(1, 1, 1)
-		lbl.Font = Enum.Font.GothamBold
-		lbl.TextSize = 12
-		lbl.Parent = card
-
-		local equipBtn = Instance.new("TextButton")
-		equipBtn.Size = UDim2.new(0.8, 0, 0, 30)
-		equipBtn.AnchorPoint = Vector2.new(0.5, 1)
-		equipBtn.Position = UDim2.new(0.5, 0, 1, -10)
-		equipBtn.BackgroundColor3 = skill.Equipped and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(100, 100, 100)
-		equipBtn.Text = skill.Equipped and "UNEQUIP" or "EQUIP"
-		equipBtn.TextColor3 = Color3.new(1, 1, 1)
-		equipBtn.Font = Enum.Font.GothamBold
-		equipBtn.TextSize = 10
-		equipBtn.Parent = card
-		createCorner(8).Parent = equipBtn
-		
-		equipBtn.Activated:Connect(function()
-			Remotes.Events.SetSkillEquipped:FireServer(skill.Id, not skill.Equipped, 1)
-		end)
+-- [COMPONENT] THẺ SKILL TRONG TÚI
+local function BagSkillCard(props: { Skill: any, EquippedSlot: number? })
+	local skill = props.Skill
+	local skillCfg = nil
+	local targetType = (skill.SkillType or ""):lower():gsub("%s+", "")
+	for _, s in ipairs(Config.Skills) do
+		if s.SkillType:lower():gsub("%s+", "") == targetType then skillCfg = s; break end
 	end
-	
-	grid.CanvasSize = UDim2.new(0, 0, 0, math.ceil(#skills/4) * 150)
+
+	local rarityColor = if skillCfg and skillCfg.Rarity then Config.Theme.RarityColors[skillCfg.Rarity] else Color3.new(1, 1, 1)
+
+	return React.createElement("Frame", {
+		Size = UDim2.new(0, 115, 0, 175),
+		BackgroundColor3 = Color3.fromRGB(35, 38, 55),
+		BackgroundTransparency = 0.1,
+	}, {
+		Corner = React.createElement("UICorner", { CornerRadius = UDim.new(0, 12) }),
+		Stroke = React.createElement("UIStroke", {
+			Color = if props.EquippedSlot then Color3.fromRGB(180, 100, 255) else rarityColor,
+			Thickness = if props.EquippedSlot then 2.5 else 1.5,
+			Transparency = 0,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		}),
+
+		IconLabel = React.createElement("TextLabel", {
+			Size = UDim2.new(1, 0, 0, 70),
+			Position = UDim2.new(0, 0, 0, 5),
+			Text = if skillCfg then skillCfg.Icon else "📜",
+			TextSize = 42,
+			BackgroundTransparency = 1,
+		}),
+
+		NameLabel = React.createElement("TextLabel", {
+			Size = UDim2.new(1, -10, 0, 18),
+			Position = UDim2.new(0, 5, 0, 80),
+			Text = if skillCfg then skillCfg.DisplayName else skill.SkillType,
+			TextColor3 = Color3.new(1, 1, 1),
+			Font = Enum.Font.GothamBold,
+			TextSize = 12,
+			TextScaled = true,
+			BackgroundTransparency = 1,
+		}),
+
+		Btns = React.createElement("Frame", {
+			Size = UDim2.new(1, -10, 0, 58),
+			Position = UDim2.new(0, 5, 1, -64),
+			BackgroundTransparency = 1,
+		}, if props.EquippedSlot then {
+			Unequip = React.createElement(ModernButton, {
+				Text = "UNEQUIP",
+				Size = UDim2.new(1, 0, 1, 0),
+				BackgroundColor = Color3.fromRGB(180, 50, 70),
+				OnClick = function() Remotes.Events.SetSkillEquipped:FireServer(skill.Id, false) end,
+			})
+		} else {
+			Layout = React.createElement("UIGridLayout", {
+				CellSize = UDim2.new(0, 31, 0, 26),
+				CellPadding = UDim2.new(0, 6, 0, 6),
+			}),
+			S1 = React.createElement(ModernButton, { Text = "S1", BackgroundColor = Color3.fromRGB(100, 150, 255), OnClick = function() Remotes.Events.SetSkillEquipped:FireServer(skill.Id, true, 1) end }),
+			S2 = React.createElement(ModernButton, { Text = "S2", BackgroundColor = Color3.fromRGB(100, 150, 255), OnClick = function() Remotes.Events.SetSkillEquipped:FireServer(skill.Id, true, 2) end }),
+			S3 = React.createElement(ModernButton, { Text = "S3", BackgroundColor = Color3.fromRGB(100, 150, 255), OnClick = function() Remotes.Events.SetSkillEquipped:FireServer(skill.Id, true, 3) end }),
+			S4 = React.createElement(ModernButton, { Text = "S4", BackgroundColor = Color3.fromRGB(100, 150, 255), OnClick = function() Remotes.Events.SetSkillEquipped:FireServer(skill.Id, true, 4) end }),
+			S5 = React.createElement(ModernButton, { Text = "S5", BackgroundColor = Color3.fromRGB(100, 150, 255), OnClick = function() Remotes.Events.SetSkillEquipped:FireServer(skill.Id, true, 5) end }),
+			Sell = React.createElement(ModernButton, { Text = "💰", BackgroundColor = Color3.fromRGB(220, 100, 100), OnClick = function() Remotes.Events.SellSkill:FireServer(skill.Id) end }),
+		}),
+	})
 end
 
-local function renderPetsTab(parent: Instance)
-	parent:ClearAllChildren()
-	local grid = Instance.new("ScrollingFrame")
-	grid.Size = UDim2.new(1, -20, 1, -20)
-	grid.Position = UDim2.new(0, 10, 0, 10)
-	grid.BackgroundTransparency = 1
-	grid.BorderSizePixel = 0
-	grid.ScrollBarThickness = 4
-	grid.Parent = parent
-	
-	local gridLayout = Instance.new("UIGridLayout")
-	gridLayout.CellSize = UDim2.new(0, 120, 0, 140)
-	gridLayout.CellPadding = UDim2.new(0, 10, 0, 10)
-	gridLayout.Parent = grid
+local function BagUI(props: { Visible: boolean, OnClose: () -> (), Data: any })
+	local activeTab, setActiveTab = React.useState("Stats" :: TabType)
 
-	local data = (DataController and DataController.GetData() or {}) :: any
-	local pets = data.Pets or {}
+	if not props.Visible then return nil end
+	local data = props.Data or {}
 
-	for i, pet in ipairs(pets) do
-		local card = Instance.new("Frame")
-		card.BackgroundColor3 = Color3.fromRGB(40, 45, 60)
-		card.LayoutOrder = i
-		card.Parent = grid
-		createCorner(10).Parent = card
-		
-		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.new(1, 0, 0, 30)
-		lbl.BackgroundTransparency = 1
-		lbl.Text = pet.PetType
-		lbl.TextColor3 = Color3.new(1,1,1)
-		lbl.Font = Enum.Font.GothamBold
-		lbl.TextSize = 12
-		lbl.Parent = card
-
-		local equipBtn = Instance.new("TextButton")
-		equipBtn.Size = UDim2.new(0.8, 0, 0, 30)
-		equipBtn.AnchorPoint = Vector2.new(0.5, 1)
-		equipBtn.Position = UDim2.new(0.5, 0, 1, -10)
-		equipBtn.BackgroundColor3 = pet.Equipped and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(100, 100, 100)
-		equipBtn.Text = pet.Equipped and "UNEQUIP" or "EQUIP"
-		equipBtn.TextColor3 = Color3.new(1, 1, 1)
-		equipBtn.Font = Enum.Font.GothamBold
-		equipBtn.TextSize = 10
-		equipBtn.Parent = card
-		createCorner(8).Parent = equipBtn
-		
-		equipBtn.Activated:Connect(function()
-			Remotes.Events.SetPetEquipped:FireServer(pet.Id, not pet.Equipped)
-		end)
+	-- Helper: Render Tab Button
+	local function TabBtn(name: string, icon: string, tab: TabType)
+		local isActive = activeTab == tab
+		return React.createElement(ModernButton, {
+			Text = if name == "STATS" then name else "", 
+			Icon = icon,
+			Size = UDim2.new(0, 85, 0, 42),
+			BackgroundColor = isActive and Color3.fromRGB(80, 120, 255) or Color3.fromRGB(40, 42, 60),
+			OnClick = function() setActiveTab(tab) end,
+		})
 	end
-	grid.CanvasSize = UDim2.new(0, 0, 0, math.ceil(#pets/4) * 150)
-end
 
--- ============================================================
--- MAIN BUILD
--- ============================================================
-function BagUI.SwitchTab(tabName: string)
-	currentTab = tabName
-	if not contentArea then return end
-	
-	if tabName == "Stats" then
-		renderStatsTab(contentArea)
-	elseif tabName == "Skills" then
-		renderSkillsTab(contentArea)
-	elseif tabName == "Pets" then
-		renderPetsTab(contentArea)
-	end
-end
+	-- Current View Renderers
+	local views = {
+		Stats = function()
+			local dmgCfg = Config.GetUpgrade("damage_1")
+			local armCfg = Config.GetUpgrade("armor_1")
+			local totalAtk = (data.Attack or 10) + (data.DamageUpgradeLevel or 0) * (dmgCfg and dmgCfg.StatPerLevel or 5)
+			local totalDef = (data.Defense or 10) + (data.ArmorUpgradeLevel or 0) * (armCfg and armCfg.StatPerLevel or 10)
 
-local function buildUI(parent: Instance?)
-	local pg = parent or getPlayerGui()
-	if not pg then return end
-	
-	-- [SMART BINDING] Detect existing BagUI
-	local existing: ScreenGui? = nil
-	for _, child in ipairs(pg:GetChildren()) do
-		if child:IsA("ScreenGui") then
-			if child.Name == "BagUI" or child:FindFirstChild("MainPanel", true) then
-				if not existing then
-					existing = child
-				else
-					child:Destroy()
+			local statList = {
+				{ Label = "Attack Power", Value = tostring(math.floor(totalAtk)), Icon = "⚔️", Color = Color3.fromRGB(255, 100, 100) },
+				{ Label = "Defense", Value = tostring(math.floor(totalDef)), Icon = "🛡️", Color = Color3.fromRGB(100, 255, 100) },
+				{ Label = "Max Health", Value = tostring(math.floor(data.MaxHealth or 100)), Icon = "❤️", Color = Color3.fromRGB(255, 150, 150) },
+				{ Label = "Rebirth Mod", Value = "x" .. string.format("%.2f", data.RebirthMultiplier or 1), Icon = "📈", Color = Color3.fromRGB(255, 200, 50) },
+				{ Label = "Vocal Points", Value = string.format("%d", data.VocalPoints or 0), Icon = "🎙️", Color = Color3.fromRGB(100, 200, 255) },
+				{ Label = "Rebirths", Value = tostring(data.RebirthCount or 0), Icon = "⭐", Color = Color3.new(1, 1, 1) },
+			}
+
+			return React.createElement("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1 }, {
+				Grid = React.createElement("UIGridLayout", { CellSize = UDim2.new(0.5, -10, 0, 75), CellPadding = UDim2.new(0, 20, 0, 20) }),
+				Items = React.createElement(React.Fragment, nil, (function()
+					local items = {}
+					for i, stat in ipairs(statList) do
+						items[stat.Label] = React.createElement("Frame", { BackgroundColor3 = Color3.fromRGB(30,32,45), BackgroundTransparency = 0.3 }, {
+							Corner = React.createElement("UICorner", { CornerRadius = UDim.new(0, 10) }),
+							Icon = React.createElement("TextLabel", { Text = stat.Icon, Size = UDim2.new(0,40,1,0), Position = UDim2.new(0,15,0,0), BackgroundTransparency = 1, TextSize = 24 }),
+							Val = React.createElement("TextLabel", { Text = stat.Value, Position = UDim2.new(0,60,0,15), Size = UDim2.new(1,-70,0,30), TextColor3 = Color3.new(1,1,1), Font = Enum.Font.GothamBold, TextSize = 18, BackgroundTransparency = 1, TextXAlignment = Enum.TextXAlignment.Left }),
+							Lbl = React.createElement("TextLabel", { Text = stat.Label:upper(), Position = UDim2.new(0,60,0,42), Size = UDim2.new(1,-70,0,20), TextColor3 = Color3.fromRGB(180,185,210), Font = Enum.Font.GothamBold, TextSize = 10, BackgroundTransparency = 1, TextXAlignment = Enum.TextXAlignment.Left })
+						})
+					end
+					return items
+				end)())
+			})
+		end,
+
+		Pets = function()
+			local pets = data.Pets or {}
+			local equippedIds = data.EquippedPetIds or {}
+			local petElements = {}
+			for _, pet in ipairs(pets) do
+				local isEq = false
+				for _, eid in ipairs(equippedIds) do if eid == pet.Id then isEq = true; break end end
+				petElements[pet.Id] = React.createElement(BagPetCard, { Pet = pet, IsEquipped = isEq })
+			end
+			return React.createElement("ScrollingFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0,0,0,0), ScrollBarThickness = 2 }, {
+				Padding = React.createElement("UIPadding", { PaddingLeft = UDim.new(0, 15), PaddingRight = UDim.new(0, 15), PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8) }),
+				Grid = React.createElement("UIGridLayout", { CellSize = UDim2.new(0, 115, 0, 145), CellPadding = UDim2.new(0, 12, 0, 12), HorizontalAlignment = Enum.HorizontalAlignment.Left }),
+				Items = React.createElement(React.Fragment, nil, petElements)
+			})
+		end,
+		
+		Skills = function()
+			local skills = data.Skills or {}
+			local equippedIds = data.EquippedSkillIds or {}
+			local skillElements = {}
+			for _, skill in ipairs(skills) do
+				local slot = nil
+				for i=1, 5 do
+					if equippedIds[i] == skill.Id or equippedIds[tostring(i)] == skill.Id then slot = i; break end
+				end
+				skillElements[skill.Id] = React.createElement(BagSkillCard, { Skill = skill, EquippedSlot = slot })
+			end
+			return React.createElement("ScrollingFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0,0,0,0), ScrollBarThickness = 2 }, {
+				Padding = React.createElement("UIPadding", { PaddingLeft = UDim.new(0, 15), PaddingRight = UDim.new(0, 15), PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8) }),
+				Grid = React.createElement("UIGridLayout", { CellSize = UDim2.new(0, 115, 0, 175), CellPadding = UDim2.new(0, 12, 0, 12), HorizontalAlignment = Enum.HorizontalAlignment.Left }),
+				Items = React.createElement(React.Fragment, nil, skillElements)
+			})
+		end,
+		
+		Effects = function()
+			local owned = data.OwnedMovementEffects or { "Default" }
+			local currentDash = data.EquippedDashEffect or "Default"
+			local currentJump = data.EquippedJumpEffect or "Default"
+			
+			local effectElements = {}
+			for _, effectId in ipairs(owned) do
+				local cfg = Config.GetMovementEffect(effectId)
+				if cfg then
+					effectElements[effectId] = React.createElement("Frame", { BackgroundColor3 = Color3.fromRGB(40, 42, 60), BackgroundTransparency = 0.2 }, {
+						Corner = React.createElement("UICorner", { CornerRadius = UDim.new(0, 12) }),
+						Title = React.createElement("TextLabel", { Size = UDim2.new(1, -250, 1, 0), Position = UDim2.new(0, 15, 0, 0), BackgroundTransparency = 1, Text = (cfg.Icon or "⚡") .. " " .. cfg.DisplayName, TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBold, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left }),
+						Btns = React.createElement("Frame", { Size = UDim2.new(0, 230, 0, 36), Position = UDim2.new(1, -240, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), BackgroundTransparency = 1 }, {
+							Layout = React.createElement("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8) }),
+							Dash = React.createElement(ModernButton, { Text = if currentDash == effectId then "DASH [X]" else "DASH", Size = UDim2.new(0, 110, 1, 0), BackgroundColor = if currentDash == effectId then Color3.fromRGB(255, 100, 50) else Color3.fromRGB(60, 65, 90), OnClick = function() Remotes.Events.SetMovementEffect:FireServer(effectId, "Dash") end }),
+							Jump = React.createElement(ModernButton, { Text = if currentJump == effectId then "JUMP [X]" else "JUMP", Size = UDim2.new(0, 110, 1, 0), BackgroundColor = if currentJump == effectId then Color3.fromRGB(80, 200, 50) else Color3.fromRGB(60, 65, 90), OnClick = function() Remotes.Events.SetMovementEffect:FireServer(effectId, "Jump") end }),
+						})
+					})
 				end
 			end
+			
+			return React.createElement("ScrollingFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0,0,0,0), ScrollBarThickness = 2 }, {
+				Padding = React.createElement("UIPadding", { PaddingLeft = UDim.new(0, 15), PaddingRight = UDim.new(0, 15), PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8) }),
+				Grid = React.createElement("UIGridLayout", { CellSize = UDim2.new(1, 0, 0, 80), CellPadding = UDim2.new(0, 10, 0, 10) }),
+				Items = React.createElement(React.Fragment, nil, effectElements)
+			})
 		end
-	end
-	
-	if existing then
-		screen = existing
-		mainPanel = existing:FindFirstChild("MainPanel") :: Frame
-		contentArea = mainPanel and mainPanel:FindFirstChild("Content") :: Frame
-		print("ℹ️ [BagUI] Using existing ScreenGui for smart binding.")
-		return
-	end
-	
-	screen = Instance.new("ScreenGui")
-	if not screen then return end
-	screen.Name = "BagUI"
-	screen.ResetOnSpawn = false
-	screen.Enabled = false
-	screen.Parent = pg
+	}
 
-	local overlay = Instance.new("Frame")
-	overlay.Size = UDim2.new(1, 0, 1, 0)
-	overlay.BackgroundColor3 = Color3.new(0, 0, 0)
-	overlay.BackgroundTransparency = 0.5
-	overlay.BorderSizePixel = 0
-	overlay.Parent = screen
-
-	mainPanel = Instance.new("Frame")
-	if not mainPanel then return end
-	mainPanel.Name = "MainPanel"
-	mainPanel.Size = UDim2.new(0, 600, 0, 500)
-	mainPanel.Position = UDim2.new(0.5, 0, 0.5, 0)
-	mainPanel.AnchorPoint = Vector2.new(0.5, 0.5)
-	mainPanel.BackgroundColor3 = Config.Theme.Background
-	mainPanel.BackgroundTransparency = 0.1
-	mainPanel.BorderSizePixel = 0
-	mainPanel.Parent = screen
-	
-	createCorner(15).Parent = mainPanel
-	createStroke(Config.Theme.StrokeColor, 2, 0.4).Parent = mainPanel
-
-	-- Header / Tabs
-	local header = Instance.new("Frame")
-	header.Name = "Header"
-	header.Size = UDim2.new(1, 0, 0, 60)
-	header.BackgroundTransparency = 1
-	header.Parent = mainPanel
-
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(0, 150, 1, 0)
-	title.Position = UDim2.new(0, 20, 0, 0)
-	title.Text = "TÚI ĐỒ"
-	title.TextColor3 = Color3.new(1, 1, 1)
-	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 22
-	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.BackgroundTransparency = 1
-	title.Parent = header
-
-	local tabContainer = Instance.new("Frame")
-	tabContainer.Size = UDim2.new(0, 300, 1, 0)
-	tabContainer.Position = UDim2.new(1, -20, 0, 0)
-	tabContainer.AnchorPoint = Vector2.new(1, 0)
-	tabContainer.BackgroundTransparency = 1
-	tabContainer.Parent = header
-
-	local tabLayout = Instance.new("UIListLayout")
-	tabLayout.FillDirection = Enum.FillDirection.Horizontal
-	tabLayout.Padding = UDim.new(0, 10)
-	tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	tabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	tabLayout.Parent = tabContainer
-
-	local function createTabBtn(name: string, icon: string, order: number)
-		local btn = Instance.new("TextButton")
-		btn.Name = name .. "Tab"
-		btn.Size = UDim2.new(0, 80, 0, 34)
-		btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-		btn.BackgroundTransparency = 0.4
-		btn.Text = icon .. " " .. name
-		btn.TextColor3 = Color3.new(1, 1, 1)
-		btn.Font = Enum.Font.GothamBold
-		btn.TextSize = 12
-		btn.LayoutOrder = order
-		btn.Parent = tabContainer
-		
-		createCorner(8).Parent = btn
-		
-		btn.Activated:Connect(function()
-			BagUI.SwitchTab(name)
-		end)
-	end
-
-	createTabBtn("Stats", "📊", 1)
-	createTabBtn("Skills", "🔥", 2)
-	createTabBtn("Pets", "🐾", 3)
-
-	local closeBtn = Instance.new("TextButton")
-	closeBtn.Size = UDim2.new(0, 40, 0, 40)
-	closeBtn.Position = UDim2.new(1, -10, 0, 10)
-	closeBtn.AnchorPoint = Vector2.new(1, 0)
-	closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-	closeBtn.Text = "✕"
-	closeBtn.TextColor3 = Color3.new(1, 1, 1)
-	closeBtn.Font = Enum.Font.GothamBlack
-	closeBtn.Parent = header
-	createCorner(10).Parent = closeBtn
-	closeBtn.Activated:Connect(function() BagUI.Close() end)
-
-	-- Content Area
-	contentArea = Instance.new("Frame")
-	if not contentArea then return end
-	contentArea.Name = "Content"
-	contentArea.Size = UDim2.new(1, -40, 1, -80)
-	contentArea.Position = UDim2.new(0, 20, 0, 70)
-	contentArea.BackgroundTransparency = 1
-	contentArea.Parent = mainPanel
-
-	BagUI.SwitchTab("Stats")
-end
-
-function BagUI.Init(overrideParent: Instance?)
-	buildUI(overrideParent)
-	
-	-- Force initial tab render for Studio/Bake mode
-	if contentArea then
-		pcall(function() BagUI.SwitchTab("Stats") end)
-	end
-	
-	print("[BagUI] Initialized")
-end
-
-function BagUI.Open()
-	if screen then 
-		screen.Enabled = true; 
-		isOpen = true 
-		BagUI.SwitchTab(currentTab)
-	end
-end
-
-function BagUI.Close()
-	if screen then screen.Enabled = false; isOpen = false end
-end
-
-function BagUI.Toggle()
-	if isOpen then BagUI.Close() else BagUI.Open() end
+	return React.createElement("ScreenGui", { Name = "BagUI", DisplayOrder = 500, Enabled = props.Visible, IgnoreGuiInset = true }, {
+		Window = React.createElement(Window, {
+			Title = "GOKU INVENTORY",
+			Icon = "🎒",
+			Visible = props.Visible,
+			OnClose = props.OnClose,
+			Size = UDim2.new(0, 560, 0, 500),
+		}, {
+			Tabs = React.createElement("Frame", { Size = UDim2.new(1, 0, 0, 55), BackgroundTransparency = 1 }, {
+				Layout = React.createElement("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 15), VerticalAlignment = Enum.VerticalAlignment.Center }),
+				T1 = TabBtn("STATS", "📊", "Stats"),
+				T2 = TabBtn("", "🐾", "Pets"),
+				T3 = TabBtn("", "🔥", "Skills"),
+				T4 = TabBtn("", "⚡", "Effects"),
+			}),
+			Content = React.createElement("Frame", { Size = UDim2.new(1, 0, 1, -65), Position = UDim2.new(0, 0, 0, 65), BackgroundTransparency = 1 }, {
+				View = (views[activeTab] or function() return nil end)()
+			})
+		})
+	})
 end
 
 return BagUI

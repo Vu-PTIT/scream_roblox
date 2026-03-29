@@ -32,9 +32,15 @@ function DataController.Get(key: string): any
 	return (_data :: any)[key]
 end
 
--- Subscribe vào khi data thay đổi
-function DataController.OnDataChanged(cb: Callback)
+-- Subscribe vào khi data thay đổi. Trả về hàm disconnect.
+function DataController.OnDataChanged(cb: Callback): () -> ()
 	table.insert(_callbacks, cb)
+	return function()
+		local idx = table.find(_callbacks, cb)
+		if idx then
+			table.remove(_callbacks, idx)
+		end
+	end
 end
 
 -- ============================================================

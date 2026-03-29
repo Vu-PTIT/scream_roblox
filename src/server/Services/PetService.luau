@@ -30,7 +30,7 @@ end
 
 -- Build: rarity → list of PetConfig
 local PetsByRarity: { [Types.PetRarity]: { Types.PetConfig } } = {
-	Common = {}, Uncommon = {}, Rare = {}, Epic = {}, Legendary = {}
+	Common = {}, Rare = {}, Epic = {}, Legendary = {}
 }
 for _, cfg in ipairs(Config.Pets) do
 	table.insert(PetsByRarity[cfg.Rarity], cfg)
@@ -129,27 +129,28 @@ local function onSetPetEquipped(player: Player, petId: string, equipped: boolean
 		return
 	end
 
+	-- Rebuild EquippedPetIds (Using fixed slots)
+	local equippedIds = data.EquippedPetIds or { "", "", "" }
 	if equipped then
-		-- Đếm số đang equip
-		local equippedCount = 0
-		for _, pet in ipairs(data.Pets) do
-			if pet.Equipped then equippedCount += 1 end
+		local slotFound = false
+		for i = 1, MAX_EQUIPPED do
+			if not equippedIds[i] or equippedIds[i] == "" then
+				equippedIds[i] = targetPet.Id
+				slotFound = true
+				break
+			end
 		end
-		if equippedCount >= MAX_EQUIPPED then
-			Remotes.Events.Notification:FireClient(player, string.format(Config.Localization.Notifications.MaxPetsEquipped, MAX_EQUIPPED))
-			return
+		if slotFound then
+			targetPet.Equipped = true
 		end
-		targetPet.Equipped = true
 	else
-		targetPet.Equipped = false
-	end
-
-	-- Rebuild EquippedPetIds
-	local equippedIds: { string } = {}
-	for _, pet in ipairs(data.Pets) do
-		if pet.Equipped then
-			table.insert(equippedIds, pet.Id)
+		for i = 1, MAX_EQUIPPED do
+			if equippedIds[i] == petId then
+				equippedIds[i] = ""
+				break
+			end
 		end
+		targetPet.Equipped = false
 	end
 
 	DataService.UpdateFields(player, {
@@ -197,9 +198,13 @@ function PetService.UpdatePhysicalPets(player: Player)
 	end
 
 	-- 2. Tạo model cho mớ equip mới
-	local currentCount = 0
-	for petId, pet in pairs(equippedDict) do
-		currentCount += 1
+	for i = 1, MAX_EQUIPPED do
+		local petId = data.EquippedPetIds[i]
+		if not petId or petId == "" then continue end
+		
+		local pet = equippedDict[petId]
+		if not pet then continue end
+
 		if not playerPets[petId] then
 			local model = Instance.new("Model")
 			model.Name = pet.PetType
@@ -214,9 +219,6 @@ function PetService.UpdatePhysicalPets(player: Player)
 			if pet.Rarity == "Common" then
 				mainPart.Color = Color3.fromRGB(200, 200, 200)
 				mainPart.Material = Enum.Material.Plastic
-			elseif pet.Rarity == "Uncommon" then
-				mainPart.Color = Color3.fromRGB(100, 255, 100)
-				mainPart.Material = Enum.Material.Neon
 			elseif pet.Rarity == "Rare" then
 				mainPart.Color = Color3.fromRGB(100, 150, 255)
 				mainPart.Material = Enum.Material.Neon
@@ -244,8 +246,8 @@ function PetService.UpdatePhysicalPets(player: Player)
 				newAtt.Name = attCharName
 				newAtt.Parent = hrp
 				
-				-- Vị trí bám theo: Tùy theo số thứ tự (Xếp vòng cung sau lưng)
-				local angle = (currentCount - 2) * 45 -- -45, 0, 45 độ
+				-- Vị trí bám theo: Dùng slotIndex (i) để tính offset vị trí (Xếp vòng cung sau lưng)
+				local angle = (i - 2) * 45 -- -45, 0, 45 độ
 				local rad = math.rad(angle)
 				newAtt.Position = Vector3.new(math.sin(rad) * 4, 3, math.cos(rad) * 4 + 2)
 				finalAtt = newAtt
@@ -285,6 +287,52 @@ local function cleanupPets(player: Player)
 end
 
 -- ============================================================
+-- SELL PET
+-- ============================================================
+local function onSellPet(player: Player, petId: string)
+	if not DataService then return end
+	local data = DataService.GetData(player) :: Types.PlayerData?
+	if not data then return end
+
+	local targetPet: Types.PetData? = nil
+	local targetIndex: number? = nil
+	for i, pet in ipairs(data.Pets) do
+		if pet.Id == petId then
+			targetPet = pet
+			targetIndex = i
+			break
+		end
+	end
+
+	if not targetPet or not targetIndex then
+		Remotes.Events.Notification:FireClient(player, Config.Localization.Notifications.PetNotFound)
+		return
+	end
+
+	if targetPet.Equipped then
+		Remotes.Events.Notification:FireClient(player, Config.Localization.Notifications.SellPetEquipped)
+		return
+	end
+
+	local sellPrice = Config.PetSellPrices and Config.PetSellPrices[targetPet.Rarity] or 15
+	
+	table.remove(data.Pets, targetIndex)
+	
+	DataService.UpdateFields(player, {
+		Pets = data.Pets,
+		Gold = data.Gold + sellPrice
+	})
+	
+	local petCfg = nil
+	for _, p in ipairs(Config.Pets) do
+		if p.PetType == targetPet.PetType then petCfg = p; break; end
+	end
+	
+	local popupName = targetPet.Rarity .. " " .. (petCfg and petCfg.DisplayName or targetPet.PetType)
+	Remotes.Events.Notification:FireClient(player, string.format(Config.Localization.Notifications.SellPet, popupName, sellPrice))
+end
+
+-- ============================================================
 -- BIND REMOTES
 -- ============================================================
 Remotes.Events.OpenEgg.OnServerEvent:Connect(function(player: Player, ...)
@@ -301,6 +349,14 @@ Remotes.Events.SetPetEquipped.OnServerEvent:Connect(function(player: Player, ...
 	local equip   = args[2]
 	if type(petId) == "string" and type(equip) == "boolean" then
 		onSetPetEquipped(player, petId, equip)
+	end
+end)
+
+Remotes.Events.SellPet.OnServerEvent:Connect(function(player: Player, ...)
+	local args = { ... }
+	local petId = args[1]
+	if type(petId) == "string" then
+		onSellPet(player, petId)
 	end
 end)
 
@@ -335,18 +391,19 @@ local function startPassiveVPLoop()
 					local data = DataService.GetData(player)
 					if not data then continue end
 					
-					-- Sum up pet multipliers (Sum mode, not product to keep it stable)
-					-- Wait, usually in these games it's a multiplier product but let's check ShoutService
-					-- In ShoutService line 29: petMult *= petData.Multiplier
-					
-					local petMult = 1
+					-- Sum up pet multipliers (Sum mode: petMult = 1 + (pet1.Mult-1) + (pet2.Mult-1) ...)
+					local petBonus = 0
 					local hasEquipped = false
 					for _, pet in ipairs(data.Pets) do
 						if pet.Equipped then
-							petMult *= pet.Multiplier
+							-- Chỉ tính phần lợi ích cộng thêm từ pet (vd: 1.5 -> +0.5)
+							petBonus += (math.max(0, pet.Multiplier - 1))
 							hasEquipped = true
 						end
 					end
+					
+					-- Tổng hệ số
+					local petMult = 1 + petBonus
 					
 					if hasEquipped then
 						local vpGain = (Config.Shout.PassiveVPBase or 2) * petMult * data.RebirthMultiplier

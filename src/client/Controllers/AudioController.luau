@@ -31,14 +31,14 @@ function AudioController.Init()
 		humanoid.StateChanged:Connect(function(oldState, newState)
 			if newState == Enum.HumanoidStateType.Jumping then
 				local snd = Instance.new("Sound")
-				snd.SoundId = Config.Audio.JumpSFX or "rbxasset://sounds/action_jump.mp3"
+				snd.SoundId = Config.Audio.JumpSFX or "rbxassetid://12222225"
 				snd.Volume = 0.5
 				snd.Parent = char.PrimaryPart
 				snd:Play()
 				Debris:AddItem(snd, 2)
 			elseif newState == Enum.HumanoidStateType.Landed then
 				local snd = Instance.new("Sound")
-				snd.SoundId = Config.Audio.LandSFX or "rbxasset://sounds/impact_drop.mp3"
+				snd.SoundId = Config.Audio.LandSFX or "rbxassetid://12222152"
 				snd.Volume = 0.5
 				snd.Parent = char.PrimaryPart
 				snd:Play()

@@ -1,3 +1,8 @@
+--!strict
+-- ShopApp.luau
+-- Quản lý tất cả cửa sổ shop (Upgrade, Pet, Skill, Quest, Rebirth)
+-- Cấu trúc: Nhận trạng thái từ UIController (Centralized State)
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 
@@ -8,47 +13,49 @@ local QuestMenu = require(script.Parent.components.QuestMenu)
 local RebirthMenu = require(script.Parent.components.RebirthMenu)
 
 local ShopApp = {}
-local _setOpenWindow: any = nil
 
-local function ShopAppComponent(props: any)
-	local openWindow, setOpenWindow = React.useState(nil)
-	local data, setData = React.useState({})
+type ShopAppProps = {
+	OpenWindow: string?,
+	OnClose: () -> (),
+	Data: any,
+}
 
-	-- Handle global state access
-	React.useEffect(function()
-		_setOpenWindow = setOpenWindow
-		return function()
-			_setOpenWindow = nil
-		end
-	end, {})
+local function ShopAppComponent(props: ShopAppProps)
+	local openWindow = props.OpenWindow
+	local data = props.Data or {}
 
-	-- Data syncing
-	React.useEffect(function()
-		local connection
-		local function check()
-			task.spawn(function()
-				local DataController = require(script.Parent.Parent.Controllers.DataController)
-				if DataController and DataController.OnDataChanged then
-					setData(DataController.GetData() or {})
-					connection = DataController.OnDataChanged(function(key, val)
-						setData(function(prev)
-							if key == "__all__" then return val end
-							local d = table.clone(prev)
-							d[key] = val
-							return d
-						end)
-					end)
-				end
-			end)
-		end
-		check()
-		return function()
-			if connection then connection:Disconnect() end
-		end
-	end, {})
-
-	local function close()
-		setOpenWindow(nil)
+	-- Conditional rendering để ngăn lỗi ở một shop làm hỏng các shop khác
+	local currentWindow = nil
+	if openWindow == "Shop" then
+		currentWindow = React.createElement(ShopUpgrade, {
+			Visible = true,
+			OnClose = props.OnClose,
+			Data = data,
+		})
+	elseif openWindow == "Pet" then
+		currentWindow = React.createElement(PetInventory, {
+			Visible = true,
+			OnClose = props.OnClose,
+			Data = data,
+		})
+	elseif openWindow == "Skill" then
+		currentWindow = React.createElement(SkillInventory, {
+			Visible = true,
+			OnClose = props.OnClose,
+			Data = data,
+		})
+	elseif openWindow == "Quest" then
+		currentWindow = React.createElement(QuestMenu, {
+			Visible = true,
+			OnClose = props.OnClose,
+			Data = data,
+		})
+	elseif openWindow == "Rebirth" then
+		currentWindow = React.createElement(RebirthMenu, {
+			Visible = true,
+			OnClose = props.OnClose,
+			Data = data,
+		})
 	end
 
 	return React.createElement("ScreenGui", {
@@ -56,42 +63,21 @@ local function ShopAppComponent(props: any)
 		ResetOnSpawn = false,
 		IgnoreGuiInset = true,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		DisplayOrder = 100,
+		DisplayOrder = 150,
+		Enabled = (openWindow ~= nil)
 	}, {
-		Upgrade = React.createElement(ShopUpgrade, {
-			Visible = (openWindow == "Shop"),
-			OnClose = close,
-			Data = data,
-		}),
-		Pet = React.createElement(PetInventory, {
-			Visible = (openWindow == "Pet"),
-			OnClose = close,
-			Data = data,
-		}),
-		Skill = React.createElement(SkillInventory, {
-			Visible = (openWindow == "Skill"),
-			OnClose = close,
-			Data = data,
-		}),
-		Quest = React.createElement(QuestMenu, {
-			Visible = (openWindow == "Quest"),
-			OnClose = close,
-			Data = data,
-		}),
-		Rebirth = React.createElement(RebirthMenu, {
-			Visible = (openWindow == "Rebirth"),
-			OnClose = close,
-			Data = data,
-		}),
+		-- Chỉ render window thực sự cần thiết
+		Content = currentWindow
 	})
 end
 
 ShopApp.Component = ShopAppComponent
 
+-- Phương thức legacy cho các module không dùng React trực tiếp
+-- (Nhưng thực tế sẽ gọi HandleAction của UIController)
 function ShopApp.OpenWindow(windowName: any)
-	if _setOpenWindow then
-		_setOpenWindow(windowName)
-	end
+	local UIController = require(script.Parent.Parent.Controllers.UIController)
+	UIController.HandleAction(windowName)
 end
 
 return ShopApp

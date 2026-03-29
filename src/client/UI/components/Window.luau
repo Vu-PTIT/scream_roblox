@@ -20,8 +20,7 @@ local function Window(props: WindowProps)
 	return React.createElement("Frame", {
 		Name = props.Title .. "Window",
 		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.5,
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ZIndex = 10,
 	}, {

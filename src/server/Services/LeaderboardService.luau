@@ -19,8 +19,14 @@ local function updateBoard(data: any)
 	end
 
 	local gui = board:FindFirstChild("LeaderboardGUI")
-	local list = gui and gui:FindFirstChild("ListFrame")
+	if not gui then
+		warn("⚠️ [LeaderboardService] Missing LeaderboardGUI in board!")
+		return
+	end
+
+	local list = gui:FindFirstChild("ListFrame")
 	if not list then
+		warn("⚠️ [LeaderboardService] Missing ListFrame in LeaderboardGUI!")
 		return
 	end
 
@@ -75,6 +81,14 @@ local function updateBoard(data: any)
 end
 
 function LeaderboardService.Init()
+	-- Early warning log if board or map folder doesn't exist
+	local map = workspace:FindFirstChild("Map")
+	if not map then
+		warn("⚠️ [LeaderboardService Early Warning] workspace.Map folder NOT FOUND. Leaderboard will not update until MapService creates it.")
+	elseif not map:FindFirstChild("GlobalLeaderboardBoard") then
+		warn("⚠️ [LeaderboardService Early Warning] GlobalLeaderboardBoard NOT FOUND in workspace.Map. Leaderboard update will wait.")
+	end
+
 	task.spawn(function()
 		while true do
 			-- Lưu điểm hiện tại của các người chơi online lên Leaderboard

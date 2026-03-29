@@ -48,6 +48,13 @@ local function animateMonster(model: Model)
 						scaleMotion:spring(0, Ripple.config.spring.stiff :: any)
 					end
 				end)
+
+				-- [TD-3] Client-side timeout: destroy if model still exists after 2s
+				task.delay(2.0, function()
+					if model.Parent then
+						model:Destroy()
+					end
+				end)
 			end
 		end
 		local attConn = model:GetAttributeChangedSignal("Dying"):Connect(onDyingChanged)
@@ -81,6 +88,13 @@ local function animateMonster(model: Model)
 				TweenService
 					:Create(val, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Value = 0 })
 					:Play()
+
+				-- [TD-3] Client-side timeout: destroy if model still exists after 2s
+				task.delay(2.0, function()
+					if model.Parent then
+						model:Destroy()
+					end
+				end)
 			end
 		end
 		local attConn = model:GetAttributeChangedSignal("Dying"):Connect(onDyingChanged)

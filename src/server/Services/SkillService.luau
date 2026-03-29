@@ -24,7 +24,7 @@ for rarity, weight in pairs(Config.SkillGachaWeights) do
 end
 
 local SkillsByRarity: { [Types.SkillRarity]: { Types.SkillConfig } } = {
-	Common = {}, Uncommon = {}, Rare = {}, Epic = {}, Legendary = {}
+	Common = {}, Rare = {}, Epic = {}, Legendary = {}
 }
 
 for _, cfg in ipairs(Config.Skills) do
@@ -94,7 +94,7 @@ local function onOpenSkillScroll(player: Player, quantity: number)
 	Remotes.Events.Notification:FireClient(player, string.format(Config.Localization.Notifications.GetSkills, table.concat(rarityNames, ", ")))
 end
 
-local MAX_SKILL_SLOTS = 2
+local MAX_SKILL_SLOTS = 5
 
 local function onSetSkillEquipped(player: Player, skillId: string, equipped: boolean, slotIndex: number?)
 	if not DataService then return end
@@ -133,8 +133,8 @@ local function onSetSkillEquipped(player: Player, skillId: string, equipped: boo
 		targetSkill.SlotIndex = nil
 	end
 
-	-- Rebuild EquippedSkillIds as a dictionary/map (1..2)
-	local equippedIds: { [number]: string } = {}
+	-- Rebuild EquippedSkillIds (Using fixed slots to avoid sparse arrays in DataStore)
+	local equippedIds: { string } = { "", "", "", "", "" }
 	for _, skill in ipairs(data.Skills) do
 		if skill.Equipped and skill.SlotIndex then
 			equippedIds[skill.SlotIndex] = skill.Id
@@ -145,6 +145,52 @@ local function onSetSkillEquipped(player: Player, skillId: string, equipped: boo
 		Skills           = data.Skills,
 		EquippedSkillIds = equippedIds,
 	})
+end
+
+local function onSellSkill(player: Player, skillId: string)
+	if not DataService then return end
+	local data = DataService.GetData(player) :: Types.PlayerData?
+	if not data then return end
+
+	local targetSkill: Types.SkillData? = nil
+	local targetIndex: number? = nil
+	for i, skill in ipairs(data.Skills) do
+		if skill.Id == skillId then
+			targetSkill = skill
+			targetIndex = i
+			break
+		end
+	end
+
+	if not targetSkill or not targetIndex then
+		Remotes.Events.Notification:FireClient(player, Config.Localization.Notifications.SkillNotFound)
+		return
+	end
+
+	if targetSkill.Equipped then
+		Remotes.Events.Notification:FireClient(player, Config.Localization.Notifications.SellSkillEquipped)
+		return
+	end
+
+	local sellPrice = Config.SkillSellPrices[targetSkill.Rarity] or 50
+	
+	table.remove(data.Skills, targetIndex)
+	
+	DataService.UpdateFields(player, {
+		Skills = data.Skills,
+		Gold = data.Gold + sellPrice
+	})
+	
+	local cfgName = targetSkill.SkillType
+	for _, cfg in ipairs(Config.Skills) do
+		if cfg.SkillType == targetSkill.SkillType then
+			cfgName = cfg.DisplayName
+			break
+		end
+	end
+	
+	local popupName = targetSkill.Rarity .. " " .. cfgName
+	Remotes.Events.Notification:FireClient(player, string.format(Config.Localization.Notifications.SellSkill, popupName, sellPrice))
 end
 
 Remotes.Events.OpenSkillScroll.OnServerEvent:Connect(function(player: Player, ...)
@@ -162,6 +208,14 @@ Remotes.Events.SetSkillEquipped.OnServerEvent:Connect(function(player: Player, .
 	local slot    = args[3]
 	if type(skillId) == "string" and type(equip) == "boolean" then
 		onSetSkillEquipped(player, skillId, equip, type(slot) == "number" and slot or nil)
+	end
+end)
+
+Remotes.Events.SellSkill.OnServerEvent:Connect(function(player: Player, ...)
+	local args = { ... }
+	local skillId = args[1]
+	if type(skillId) == "string" then
+		onSellSkill(player, skillId)
 	end
 end)
 

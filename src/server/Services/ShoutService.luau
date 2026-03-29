@@ -187,7 +187,14 @@ function ShoutService.PerformShout(
 			-- Monster attacks on players are more punishing (1.5x), PvP is reduced (0.5x)
 			local finalDamage = if isMonster then math.max(1, damageTaken * 1.5) else damageTaken * 0.5
 			targetHum:TakeDamage(finalDamage)
-			print(string.format("[ShoutService] HIT PLAYER: %s | Damage: %.1f (Attacker isMonster: %s)", targetCharAct.Name, finalDamage, tostring(isMonster)))
+			print(
+				string.format(
+					"[ShoutService] HIT PLAYER: %s | Damage: %.1f (Attacker isMonster: %s)",
+					targetCharAct.Name,
+					finalDamage,
+					tostring(isMonster)
+				)
+			)
 		end
 
 		Remotes.Events.KnockbackOccurred:FireAllClients(targetCharAct, force, damageTaken, casterUserId)
@@ -263,7 +270,7 @@ local function onShoutFired(caster: Player, direction: Vector3, powerMult: numbe
 		end
 	else
 		-- Gacha Skill (Phím 1, 2)
-		local skillId = attackerData.EquippedSkillIds[sIndex]
+		local skillId = attackerData.EquippedSkillIds[sIndex] or (attackerData.EquippedSkillIds :: any)[tostring(sIndex)]
 		if skillId then
 			for _, skill in ipairs(attackerData.Skills) do
 				if skill.Id == skillId then

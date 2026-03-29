@@ -24,6 +24,7 @@ end)
 
 local ShoutController = {} :: {
 	PerformShout: (slotIndex: number, overrideDirection: Vector3?, powerMult: number?) -> (),
+	PerformVFXOnly: (direction: Vector3?, vfxType: string?) -> (),
 	GetCooldownData: (slotIndex: number) -> (number, number),
 	GetChargingSlot: () -> number?,
 	GetSelectedSlot: () -> number,
@@ -34,7 +35,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-local lastShoutTimes = { [0] = 0, [1] = 0, [2] = 0 }
+local lastShoutTimes = { [0] = 0, [1] = 0, [2] = 0, [3] = 0, [4] = 0, [5] = 0 }
 local isCharging = false
 local chargeStartTime = 0
 local auraEmitter: ParticleEmitter? = nil
@@ -62,8 +63,8 @@ local function getEquippedSkillConfig(slotIndex: number)
 		return Config.Skills[1]
 	end
 
-	local skillId = data.EquippedSkillIds[slotIndex]
-	if not skillId then
+	local skillId = data.EquippedSkillIds[slotIndex] or data.EquippedSkillIds[tostring(slotIndex)]
+	if not skillId or skillId == "" then
 		return nil
 	end -- Không có skill ở slot này
 
@@ -382,7 +383,8 @@ local function performShout(slotIndex: number, overrideDirection: Vector3?, powe
 	if DataController then
 		local data = DataController.GetData()
 		if data then
-			attackPower = data.Attack + (data.DamageUpgradeLevel * Config.Upgrades[1].StatPerLevel)
+			local upgradeCfg = Config.GetUpgrade("damage_1")
+			attackPower = data.Attack + (data.DamageUpgradeLevel * (upgradeCfg and upgradeCfg.StatPerLevel or 5))
 		end
 	end
 
@@ -469,11 +471,16 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		if slotToTry > 0 then
 			local lastTime = lastShoutTimes[slotToTry] or 0
 			local skillConfig = getEquippedSkillConfig(slotToTry)
-			local cd = skillConfig and skillConfig.Cooldown or 0.8
 
-			if os.clock() - lastTime < cd then
-				-- Đang hồi chiêu -> Fallback về Basic (Slot 0)
+			if not skillConfig then
+				-- Chưa nắp chiêu -> Fallback về Basic (Slot 0)
 				slotToTry = 0
+			else
+				local cd = skillConfig.Cooldown or 0.8
+				if os.clock() - lastTime < cd then
+					-- Đang hồi chiêu -> Fallback về Basic (Slot 0)
+					slotToTry = 0
+				end
 			end
 		end
 		slotToCharge = slotToTry
@@ -486,6 +493,18 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		-- Select only
 		SelectedSkillSlot = 2
 		print("[ShoutController] Selected Skill Slot 2")
+		return
+	elseif input.KeyCode == Enum.KeyCode.Three then
+		SelectedSkillSlot = 3
+		print("[ShoutController] Selected Skill Slot 3")
+		return
+	elseif input.KeyCode == Enum.KeyCode.Four then
+		SelectedSkillSlot = 4
+		print("[ShoutController] Selected Skill Slot 4")
+		return
+	elseif input.KeyCode == Enum.KeyCode.Five then
+		SelectedSkillSlot = 5
+		print("[ShoutController] Selected Skill Slot 5")
 		return
 	end
 
@@ -508,7 +527,8 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	end
 
 	if input.KeyCode == Enum.KeyCode.Space then
-		performShout(0, Vector3.new(0, -1, 0), 1) -- Basic slam slot 0
+		-- Nhảy: Chỉ phát VFX theo skill đang dùng, KHÔNG gây dame
+		ShoutController.PerformVFXOnly(Vector3.new(0, 1, 0), "Jump")
 	end
 end)
 
@@ -519,6 +539,12 @@ UserInputService.InputEnded:Connect(function(input: InputObject, _gameProcessed:
 	elseif input.KeyCode == Enum.KeyCode.One and CurrentChargingSlot == 1 then
 		isMatch = true
 	elseif input.KeyCode == Enum.KeyCode.Two and CurrentChargingSlot == 2 then
+		isMatch = true
+	elseif input.KeyCode == Enum.KeyCode.Three and CurrentChargingSlot == 3 then
+		isMatch = true
+	elseif input.KeyCode == Enum.KeyCode.Four and CurrentChargingSlot == 4 then
+		isMatch = true
+	elseif input.KeyCode == Enum.KeyCode.Five and CurrentChargingSlot == 5 then
 		isMatch = true
 	end
 
@@ -580,7 +606,19 @@ Remotes.Events.KnockbackOccurred.OnClientEvent:Connect(
 			hum:ChangeState(Enum.HumanoidStateType.FallingDown)
 
 			hrp.AssemblyAngularVelocity = Vector3.new(math.random(-15, 15), math.random(-15, 15), math.random(-15, 15))
-			hrp.AssemblyLinearVelocity = force + Vector3.new(0, 20, 0)
+			
+			-- BUG-4 FIX: Kiểm tra xem có Chickynoid character controller không
+			-- Nếu có, gửi force qua RemoteFunction để tránh snapping/rubberband
+			local Chickynoid = game.ReplicatedStorage:FindFirstChild("Chickynoid")
+			local ChickynoidRemote = Chickynoid and Chickynoid:FindFirstChild("Remotes") and Chickynoid.Remotes:FindFirstChild("ApplyImpulse")
+			
+			if ChickynoidRemote and ChickynoidRemote:IsA("RemoteFunction") then
+				-- Gửi force cho Chickynoid server-authoritative
+				ChickynoidRemote:InvokeServer(force + Vector3.new(0, 20, 0))
+			else
+				-- Fallback cho standard Humanoid physics
+				hrp.AssemblyLinearVelocity = force + Vector3.new(0, 20, 0)
+			end
 
 			local a0 = Instance.new("Attachment", hrp)
 			a0.Position = Vector3.new(0, 1, 0)
@@ -679,6 +717,57 @@ function ShoutController.SetSelectedSlot(slot: number)
 end
 
 ShoutController.PerformShout = performShout
+
+-- PerformVFXOnly: Phát VFX + SFX theo skill đang equipped NHƯNG không gây dame lên server
+-- Dùng cho Dash và Nhảy để không lây dame vào cơ chế di chuyển
+function ShoutController.PerformVFXOnly(direction: Vector3?, vfxType: string?)
+	local character = LocalPlayer.Character
+	if not character then return end
+	local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then return end
+
+	-- Lấy config skill đang equipped (slot SelectedSkillSlot hoặc basic)
+	local skillConfig = getEquippedSkillConfig(SelectedSkillSlot) or getEquippedSkillConfig(0)
+	if not skillConfig then return end
+
+	local shoutConfig = Config.ShoutTypes[skillConfig.ShoutTypeId] or Config.ShoutTypes.Normal
+
+	-- Hướng phát VFX
+	local dir = direction or hrp.CFrame.LookVector
+	dir = dir.Unit
+	local originCFrame = CFrame.new(hrp.Position, hrp.Position + dir * 100)
+
+	local rarityColor = Config.Theme.RarityColors and Config.Theme.RarityColors[skillConfig.Rarity]
+
+	-- Chọn VFX phù hợp với loại (Nhảy dùng Circular nhỏ, Dash dùng Normal)
+	if vfxType == "Jump" then
+		-- Nhảy: phát vòng tròn nhỏ bên dưới chân + JumpSFX
+		local groundCFrame = CFrame.new(hrp.Position - Vector3.new(0, 2.5, 0))
+		ShoutWave.PlayCircular(groundCFrame, 20, shoutConfig, rarityColor, 0.5, skillConfig.EffectColor, 0.6)
+		AnimationController.Play("Jump")
+		-- Âm thanh nhảy
+		if Config.Audio and Config.Audio.JumpSFX and Config.Audio.JumpSFX ~= "" then
+			local snd = Instance.new("Sound")
+			snd.SoundId = Config.Audio.JumpSFX
+			snd.Volume = 0.5
+			snd.RollOffMaxDistance = 30
+			snd.Parent = hrp
+			snd:Play()
+			game:GetService("Debris"):AddItem(snd, 2)
+		end
+	else
+		-- Dash: phát VFX bình thường theo hướng dash + DashSFX (đã có trong DashController nhưng thêm 1 lớp nhẹ hơn)
+		if shoutConfig.Id == "Circular" then
+			ShoutWave.PlayCircular(originCFrame, 25, shoutConfig, rarityColor, 0.7, skillConfig.EffectColor, skillConfig.EffectSize)
+		else
+			ShoutWave.Play(originCFrame, 25, shoutConfig, rarityColor, 0.7, skillConfig.EffectColor, skillConfig.EffectSize)
+		end
+		AnimationController.Play("Dash")
+	end
+
+	-- Camera kick nhẹ để cảm giác impact (nhỏ hơn shout thật)
+	_cameraShake(0.2, 0.1)
+end
 
 -- Register with Refx
 Refx.Register("MonsterShoutVFX", function(position: Vector3, lookPos: Vector3, attackPower: number, shoutTypeId: string)
